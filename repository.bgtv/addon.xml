@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="repository.bgtv" name="[COLOR red][B]BGTV[/B][/COLOR] Add-on Repository" version="1.0.0" provider-name="BGTV">
+    <extension point="xbmc.addon.repository" name="[COLOR red][B]BGTV[/B][/COLOR] Add-on Repository">
+        <dir>
+            <info compressed="false">https://kodi.bgtv.online/addons.xml</info>
+            <checksum>https://kodi.bgtv.online/addons.xml.md5</checksum>
+            <datadir zip="true">https://kodi.bgtv.online/</datadir>
+        </dir>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary>BGTV Custom Kodi Repository</summary>
+        <description>The official repository for BGTV members. Provides safe and curated add-ons including the OpenWizard buffering fix, Seren, The Crew, and The Loop.</description>
+        <disclaimer>This repository acts as a directory to original author packages.</disclaimer>
+        <platform>all</platform>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+    </extension>
+</addon>
