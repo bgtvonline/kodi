@@ -36,6 +36,20 @@
             </assets>
         </extension>
     </addon>
+    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="1.0.6" provider-name="BGTV">
+        <requires>
+            <import addon="xbmc.python" version="3.0.0" />
+        </requires>
+        <extension point="xbmc.python.pluginsource" library="main.py">
+            <provides>executable</provides>
+        </extension>
+        <extension point="xbmc.addon.metadata">
+            <summary lang="bg">Бърза настройка на BGTV (Live TV)</summary>
+            <summary lang="en">1-Click BGTV Live TV Setup</summary>
+            <description lang="bg">Този инструмент автоматично инсталира и настройва TVHeadend PVR добавката. Той ще попълни всички нужни портове и адреси за сървъра на BGTV (bgtv.pw), след което ще ви попита само за вашето потребителско име и парола.</description>
+            <platform>all</platform>
+        </extension>
+    </addon>
     <addon id="repository.thecrew" name="[COLOR orchid]THE CREW REPO[/COLOR]" provider-name="The Crew" version="0.3.4">
         <extension point="xbmc.addon.repository" name="The Crew">
             <dir minversion="16.0.0" maxversion="18.9.9">
@@ -163,20 +177,6 @@
             <summary lang="en" />
             <description lang="en" />
             <genre />
-        </extension>
-    </addon>
-    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="1.0.6" provider-name="BGTV">
-        <requires>
-            <import addon="xbmc.python" version="3.0.0" />
-        </requires>
-        <extension point="xbmc.python.pluginsource" library="main.py">
-            <provides>executable</provides>
-        </extension>
-        <extension point="xbmc.addon.metadata">
-            <summary lang="bg">Бърза настройка на BGTV (Live TV)</summary>
-            <summary lang="en">1-Click BGTV Live TV Setup</summary>
-            <description lang="bg">Този инструмент автоматично инсталира и настройва TVHeadend PVR добавката. Той ще попълни всички нужни портове и адреси за сървъра на BGTV (bgtv.pw), след което ще ви попита само за вашето потребителско име и парола.</description>
-            <platform>all</platform>
         </extension>
     </addon>
 </addons>
