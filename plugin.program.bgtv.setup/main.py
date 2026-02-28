@@ -5,7 +5,6 @@ import xbmcvfs
 import json
 
 def is_addon_installed(addon_id):
-    """Check if an addon is installed using JSON-RPC"""
     try:
         request = json.dumps({
             "jsonrpc": "2.0",
@@ -21,47 +20,21 @@ def is_addon_installed(addon_id):
 def run():
     dialog = xbmcgui.Dialog()
     
-    # Check if pvr.hts is already installed
-    pvr_installed = is_addon_installed('pvr.hts')
-
-    if not pvr_installed:
-        # Tell user what will happen, then trigger install
+    # Check if pvr.hts is installed (it should be, because it's a strict dependency now)
+    if not is_addon_installed('pvr.hts'):
         dialog.ok(
-            "[COLOR red]BGTV[/COLOR] Съветник",
-            "За да работи телевизията, е нужен PVR клиент.\n\n"
-            "Kodi ще ви попита дали искате да го инсталирате.\n"
-            "Моля, натиснете [COLOR green]ДА[/COLOR] (Yes)!"
+            "Грешка",
+            "TVHeadend PVR клиентът липсва!\n\n"
+            "Kodi не успя да го инсталира. Моля отидете на:\n"
+            "[COLOR yellow]Add-ons > Install from repository > Kodi Add-on repository > PVR clients > Tvheadend HTSP Client[/COLOR]\n\n"
+            "Инсталирайте го ръчно и стартирайте този Съветник отново."
         )
-        
-        # Trigger install - Kodi will show its own Yes/No dialog
-        xbmc.executebuiltin('InstallAddon(pvr.hts)')
-        
-        # Give Kodi time to show its dialog and for user to click Yes
-        # NO progress dialog here - it would cover Kodi's native dialog!
-        xbmc.sleep(15000)
-        
-        # Now wait a bit more for the download to complete
-        for i in range(45):
-            xbmc.sleep(1000)
-            if is_addon_installed('pvr.hts'):
-                break
-        
-        if not is_addon_installed('pvr.hts'):
-            dialog.ok(
-                "PVR не е инсталиран",
-                "Изглежда PVR клиентът не беше инсталиран.\n\n"
-                "Моля стартирайте Съветника отново и\n"
-                "натиснете [COLOR green]ДА[/COLOR] когато Kodi ви попита."
-            )
-            return
-        
-        # PVR just got installed!
-        dialog.notification('BGTV', 'PVR клиентът е инсталиран!', xbmcgui.NOTIFICATION_INFO, 3000)
+        return
     
-    # PVR is installed - now ask for credentials
+    # PVR is installed, proceed with setup
     dialog.ok(
         "[COLOR red]BGTV[/COLOR] Съветник", 
-        "PVR клиентът е готов!\nСега въведете вашите BGTV данни."
+        "Добре дошли в инсталатора на BGTV!\nЩе ви помолим само за вашето потребителско име и парола."
     )
 
     # Prompt for username
