@@ -21,24 +21,47 @@ def is_addon_installed(addon_id):
 def run():
     dialog = xbmcgui.Dialog()
     
-    # Check if pvr.hts is already installed FIRST
+    # Check if pvr.hts is already installed
     pvr_installed = is_addon_installed('pvr.hts')
 
     if not pvr_installed:
-        # Tell user to install PVR client manually first
+        # Tell user what will happen, then trigger install
         dialog.ok(
             "[COLOR red]BGTV[/COLOR] Съветник",
-            "Преди да продължим, трябва да инсталирате TVHeadend PVR клиента.\n\n"
-            "Моля отидете на:\n"
-            "[COLOR yellow]Add-ons > Install from repository > Kodi Add-on repository > PVR clients > Tvheadend HTSP Client[/COLOR]\n\n"
-            "След като го инсталирате, стартирайте този Съветник отново!"
+            "За да работи телевизията, е нужен PVR клиент.\n\n"
+            "Kodi ще ви попита дали искате да го инсталирате.\n"
+            "Моля, натиснете [COLOR green]ДА[/COLOR] (Yes)!"
         )
-        return
+        
+        # Trigger install - Kodi will show its own Yes/No dialog
+        xbmc.executebuiltin('InstallAddon(pvr.hts)')
+        
+        # Give Kodi time to show its dialog and for user to click Yes
+        # NO progress dialog here - it would cover Kodi's native dialog!
+        xbmc.sleep(15000)
+        
+        # Now wait a bit more for the download to complete
+        for i in range(45):
+            xbmc.sleep(1000)
+            if is_addon_installed('pvr.hts'):
+                break
+        
+        if not is_addon_installed('pvr.hts'):
+            dialog.ok(
+                "PVR не е инсталиран",
+                "Изглежда PVR клиентът не беше инсталиран.\n\n"
+                "Моля стартирайте Съветника отново и\n"
+                "натиснете [COLOR green]ДА[/COLOR] когато Kodi ви попита."
+            )
+            return
+        
+        # PVR just got installed!
+        dialog.notification('BGTV', 'PVR клиентът е инсталиран!', xbmcgui.NOTIFICATION_INFO, 3000)
     
-    # PVR is installed, proceed with setup
+    # PVR is installed - now ask for credentials
     dialog.ok(
         "[COLOR red]BGTV[/COLOR] Съветник", 
-        "Добре дошли в инсталатора на BGTV!\nЩе ви помолим само за вашето потребителско име и парола."
+        "PVR клиентът е готов!\nСега въведете вашите BGTV данни."
     )
 
     # Prompt for username
@@ -62,12 +85,7 @@ def run():
     xbmc.sleep(2000)
     pDialog.update(40, "Записване на настройките...")
 
-    # --- CRITICAL FIX ---
-    # Kodi 20+ (Nexus/Omega) uses MULTI-INSTANCE PVR settings.
-    # Connection settings (host, user, pass) are stored PER INSTANCE at:
-    #   addon_data/pvr.hts/instances/instance-1/settings.xml
-    # We also write to root settings.xml for backward compatibility.
-    
+    # Kodi 20+ multi-instance settings + legacy root settings
     instance_settings_xml = '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings version="1">
     <setting id="host">{host}</setting>
@@ -136,7 +154,6 @@ def run():
         dialog.ok("Грешка", "Не можах да запиша всички настройки. Моля опитайте отново.")
         return
 
-    # Ask to restart
     restart = dialog.yesno(
         "Успех! ✅", 
         "BGTV е настроена!\n\nСървър: bgtv.pw\nПотребител: {user}\n\nKodi трябва да се рестартира.\nДа го затворя ли сега?".format(user=username)
