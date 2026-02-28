@@ -9,7 +9,7 @@ def run():
     # Show welcome message
     dialog.ok(
         "[COLOR red]BGTV[/COLOR] Съветник", 
-        "Добре дошли в инсталатора на BGTV телевизия!\nЩе ви помолим само за вашето потребителско име и парола."
+        "Добре дошли в инсталатора на BGTV!\nЩе ви помолим само за вашето потребителско име и парола."
     )
 
     # Prompt for username
@@ -26,7 +26,7 @@ def run():
 
     # Inform user we are setting things up
     pDialog = xbmcgui.DialogProgress()
-    pDialog.create("[COLOR red]BGTV[/COLOR] Съветник", "Инсталиране на TVHeadend клиент...")
+    pDialog.create("[COLOR red]BGTV[/COLOR] Съветник", "Инсталиране на PVR клиент...")
     pDialog.update(10)
 
     # Enable the PVR addon (it should already be installed as a dependency)
