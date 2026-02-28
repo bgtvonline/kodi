@@ -18,6 +18,24 @@
             </assets>
         </extension>
     </addon>
+    <addon id="repository.bgtv" name="[COLOR red][B]BGTV[/B][/COLOR] Add-on Repository" version="1.0.0" provider-name="BGTV">
+        <extension point="xbmc.addon.repository" name="[COLOR red][B]BGTV[/B][/COLOR] Add-on Repository">
+            <dir>
+                <info compressed="false">https://kodi.bgtv.online/addons.xml</info>
+                <checksum>https://kodi.bgtv.online/addons.xml.md5</checksum>
+                <datadir zip="true">https://kodi.bgtv.online/</datadir>
+            </dir>
+        </extension>
+        <extension point="xbmc.addon.metadata">
+            <summary>BGTV Custom Kodi Repository</summary>
+            <description>The official repository for BGTV members. Provides safe and curated add-ons including the OpenWizard buffering fix, Seren, The Crew, and The Loop.</description>
+            <disclaimer>This repository acts as a directory to original author packages.</disclaimer>
+            <platform>all</platform>
+            <assets>
+                <icon>icon.png</icon>
+            </assets>
+        </extension>
+    </addon>
     <addon id="repository.thecrew" name="[COLOR orchid]THE CREW REPO[/COLOR]" provider-name="The Crew" version="0.3.4">
         <extension point="xbmc.addon.repository" name="The Crew">
             <dir minversion="16.0.0" maxversion="18.9.9">
@@ -145,6 +163,20 @@
             <summary lang="en" />
             <description lang="en" />
             <genre />
+        </extension>
+    </addon>
+    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="1.0.0" provider-name="BGTV">
+        <requires>
+            <import addon="xbmc.python" version="3.0.0" />
+        </requires>
+        <extension point="xbmc.python.pluginsource" library="main.py">
+            <provides>executable</provides>
+        </extension>
+        <extension point="xbmc.addon.metadata">
+            <summary lang="bg">Бърза настройка на BGTV (Live TV)</summary>
+            <summary lang="en">1-Click BGTV Live TV Setup</summary>
+            <description lang="bg">Този инструмент автоматично инсталира и настройва TVHeadend PVR добавката. Той ще попълни всички нужни портове и адреси за сървъра на BGTV (bgtv.pw), след което ще ви попита само за вашето потребителско име и парола.</description>
+            <platform>all</platform>
         </extension>
     </addon>
 </addons>
