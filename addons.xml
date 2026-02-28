@@ -165,10 +165,9 @@
             <genre />
         </extension>
     </addon>
-    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="1.0.4" provider-name="BGTV">
+    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="1.0.6" provider-name="BGTV">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
-            <import addon="pvr.hts" />
         </requires>
         <extension point="xbmc.python.pluginsource" library="main.py">
             <provides>executable</provides>
