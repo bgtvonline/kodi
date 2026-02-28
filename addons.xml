@@ -18,13 +18,11 @@
             </assets>
         </extension>
     </addon>
-    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="1.0.9" provider-name="BGTV">
+    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="2.0.0" provider-name="BGTV">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
-            <import addon="pvr.hts" />
         </requires>
         <extension point="xbmc.python.pluginsource" library="main.py">
-            <import addon="pvr.hts" />
             <provides>executable</provides>
         </extension>
         <extension point="xbmc.addon.metadata">
