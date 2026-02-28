@@ -23,10 +23,9 @@ def run():
         return
 
     # Inform user we are setting things up
-    dialog.notification('BGTV Съветник', 'Инсталиране и конфигуриране на TVHeadend...', xbmcgui.NOTIFICATION_INFO, 3000)
+    dialog.notification('BGTV Съветник', 'Конфигуриране на TVHeadend...', xbmcgui.NOTIFICATION_INFO, 3000)
 
-    # Automatically trigger install/enable of the PVR client
-    xbmc.executebuiltin('InstallAddon(pvr.hts)')
+    # Enable the PVR client (it was auto-installed silently as a dependency)
     xbmc.executebuiltin('EnableAddon(pvr.hts)')
     
     # Wait to allow Kodi to enable the add-on in the background
