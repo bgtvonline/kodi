@@ -9,11 +9,17 @@ ADDONS_MD5_PATH = os.path.join(REPO_ROOT, "addons.xml.md5")
 
 def create_addons_xml():
     root = ET.Element("addons")
+    seen_ids = set()
+
     # First, parse our own repository addon.xml
     repo_xml = os.path.join(REPO_ROOT, "repository.bgtv", "addon.xml")
     if os.path.exists(repo_xml):
         tree = ET.parse(repo_xml)
-        root.append(tree.getroot())
+        addon_elem = tree.getroot()
+        addon_id = addon_elem.get('id')
+        if addon_id not in seen_ids:
+            root.append(addon_elem)
+            seen_ids.add(addon_id)
 
     # Then parse the addon.xml out of every zip we host
     for walk_root, dirs, files in os.walk(REPO_ROOT):
@@ -26,14 +32,16 @@ def create_addons_xml():
                 zip_path = os.path.join(walk_root, file)
                 try:
                     with zipfile.ZipFile(zip_path, 'r') as z:
-                        # Find the addon.xml inside the zip. Usually it's in a subfolder `addon_id/addon.xml`
                         addon_xml_files = [f for f in z.namelist() if f.endswith('addon.xml')]
                         if addon_xml_files:
-                            # Assume the shortest path is the root addon.xml
                             addon_xml_file = min(addon_xml_files, key=len)
                             with z.open(addon_xml_file) as xml_file:
                                 addon_tree = ET.parse(xml_file)
-                                root.append(addon_tree.getroot())
+                                addon_elem = addon_tree.getroot()
+                                addon_id = addon_elem.get('id')
+                                if addon_id not in seen_ids:
+                                    root.append(addon_elem)
+                                    seen_ids.add(addon_id)
                 except Exception as e:
                     print(f"Error processing {zip_path}: {e}")
 
