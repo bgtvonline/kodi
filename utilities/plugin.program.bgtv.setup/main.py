@@ -45,10 +45,6 @@ def run():
         pvr_addon.setSetting('user', username)
         pvr_addon.setSetting('pass', password)
         
-        # Force streaming profile to matroska/pass if available/needed
-        # (Commented out as default HTSP is usually best, but could be added)
-        # pvr_addon.setSetting('profile', 'pass')
-
         # Inform user of success
         dialog.ok(
             "Успех!", 
@@ -57,7 +53,11 @@ def run():
 
     except Exception as e:
         xbmc.log("BGTV Setup Error: " + str(e), xbmc.LOGERROR)
-        dialog.ok("Грешка", f"Не можах да настроя pvr.hts автоматично. Уверете се, че е инсталиран от официалното PVR хранилище.\nГрешка: {str(e)}")
+        dialog.ok(
+            "Внимание: TVHeadend не е наличен", 
+            "Kodi не можа да намери добавката TVHeadend HTSP Client. Сега ще ви отворим прозореца за инсталация.\n\nМоля, цъкнете 'Install' (Инсталирай) и след това стартирайте нашия BGTV Съветник отново."
+        )
+        xbmc.executebuiltin("ActivateWindow(AddonInformation,pvr.hts)")
 
 if __name__ == '__main__':
     run()
