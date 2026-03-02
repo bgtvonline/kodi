@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="2.1.0" provider-name="BGTV">
+<addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="2.1.1" provider-name="BGTV">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
     </requires>

@@ -38,7 +38,6 @@ def run():
     # STEP 1: Check if PVR client is installed
     # ============================================================
     if not is_pvr_installed():
-        # PVR is NOT installed - guide user to install it
         dialog.ok(
             "[COLOR red]BGTV[/COLOR] Съветник",
             "За да гледате телевизия, е нужен PVR клиент.\n\n"
@@ -47,8 +46,11 @@ def run():
             "и натиснете [COLOR green]Install[/COLOR].\n\n"
             "След това стартирайте Съветника отново!"
         )
-        # Open the PVR clients category in the official Kodi repo
-        xbmc.executebuiltin('ActivateWindow(addonbrowser,addons://repos/xbmc.pvrclient,return)')
+        # Open the PVR clients list in the addon browser
+        # Using multiple fallback paths for compatibility
+        xbmc.executebuiltin('ActivateWindow(10040,addons://browse/xbmc.pvrclient,return)')
+        # Give Kodi time to process the command before script exits
+        xbmc.sleep(2000)
         return
 
     # ============================================================
@@ -77,12 +79,10 @@ def run():
     pDialog.create("[COLOR red]BGTV[/COLOR] Съветник", "Активиране на PVR клиента...")
     pDialog.update(20)
 
-    # Enable via JSON-RPC (more reliable than executebuiltin)
     enable_pvr()
     xbmc.sleep(2000)
     pDialog.update(40, "Записване на настройките...")
 
-    # Kodi 20+ (Nexus/Omega) multi-instance settings
     instance_settings_xml = '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings version="1">
     <setting id="host">{host}</setting>
@@ -99,7 +99,6 @@ def run():
     <setting id="dvr_playstatus">true</setting>
 </settings>'''.format(host='bgtv.pw', http_port='9981', htsp_port='9982', user=username, password=password)
 
-    # Legacy root settings (Kodi 19 and below)
     root_settings_xml = '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings version="1">
     <setting id="host">{host}</setting>
@@ -120,7 +119,6 @@ def run():
     pDialog.update(60, "Записване на настройките...")
 
     success = True
-    written_paths = []
     for filepath, content in paths_to_write:
         dirpath = os.path.dirname(filepath)
         if not os.path.exists(dirpath):
@@ -128,7 +126,6 @@ def run():
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
-            written_paths.append(filepath)
             xbmc.log("BGTV Setup: Wrote settings to " + filepath, xbmc.LOGINFO)
         except Exception as e:
             xbmc.log("BGTV Setup Error: " + filepath + ": " + str(e), xbmc.LOGERROR)
@@ -139,10 +136,9 @@ def run():
     pDialog.close()
 
     if not success:
-        dialog.ok("Грешка", "Проблем при записване на настройките.\nМоля опитайте отново.")
+        dialog.ok("Грешка", "Проблем при записване на настройките.")
         return
 
-    # Show success with details
     restart = dialog.yesno(
         "Успех! ✅",
         "BGTV е настроена!\n\n"
