@@ -5,7 +5,7 @@ import xbmcvfs
 import json
 
 def is_pvr_installed():
-    """Check if pvr.hts is truly installed and available"""
+    """Check if pvr.hts is installed using JSON-RPC"""
     try:
         request = json.dumps({
             "jsonrpc": "2.0",
@@ -14,60 +14,49 @@ def is_pvr_installed():
             "id": 1
         })
         response = json.loads(xbmc.executeJSONRPC(request))
-        if 'result' in response:
-            addon = response['result']['addon']
-            return addon.get('installed', False)
-        return False
+        return 'result' in response
     except:
         return False
+
+def enable_pvr():
+    """Enable pvr.hts via JSON-RPC"""
+    try:
+        request = json.dumps({
+            "jsonrpc": "2.0",
+            "method": "Addons.SetAddonEnabled",
+            "params": {"addonid": "pvr.hts", "enabled": True},
+            "id": 1
+        })
+        xbmc.executeJSONRPC(request)
+    except:
+        pass
 
 def run():
     dialog = xbmcgui.Dialog()
 
     # ============================================================
-    # STEP 1: Check if PVR client is installed. If not, install it.
+    # STEP 1: Check if PVR client is installed
     # ============================================================
     if not is_pvr_installed():
-        # Tell user EXACTLY what to do
+        # PVR is NOT installed - guide user to install it
         dialog.ok(
             "[COLOR red]BGTV[/COLOR] Съветник",
             "За да гледате телевизия, е нужен PVR клиент.\n\n"
-            "След като натиснете [COLOR yellow]OK[/COLOR], Kodi ще ви\n"
-            "попита дали искате да го инсталирате.\n\n"
-            "[COLOR green]Натиснете YES / ДА![/COLOR]"
+            "Ще отворя списъка с PVR добавки.\n"
+            "Намерете [COLOR yellow]Tvheadend HTSP Client[/COLOR]\n"
+            "и натиснете [COLOR green]Install[/COLOR].\n\n"
+            "След това стартирайте Съветника отново!"
         )
-        # User clicked OK - our dialog is now CLOSED
-        # Trigger the install - Kodi's native dialog should appear unblocked
-        xbmc.executebuiltin('InstallAddon(pvr.hts)')
-
-        # Wait silently (no progress dialog!) for up to 90 seconds
-        # This gives the user time to see Kodi's dialog and click Yes
-        installed = False
-        for i in range(90):
-            xbmc.sleep(1000)
-            if is_pvr_installed():
-                installed = True
-                break
-
-        if not installed:
-            dialog.ok(
-                "PVR не е инсталиран",
-                "Изглежда PVR клиентът не беше инсталиран.\n\n"
-                "Моля стартирайте Съветника отново и\n"
-                "натиснете [COLOR green]YES / ДА[/COLOR] когато Kodi ви попита."
-            )
-            return
-
-        # Success notification
-        dialog.notification('BGTV', 'PVR клиентът е инсталиран!', xbmcgui.NOTIFICATION_INFO, 3000)
-        xbmc.sleep(1000)
+        # Open the PVR clients category in the official Kodi repo
+        xbmc.executebuiltin('ActivateWindow(addonbrowser,addons://repos/xbmc.pvrclient,return)')
+        return
 
     # ============================================================
-    # STEP 2: PVR is installed. Now ask for credentials.
+    # STEP 2: PVR is installed! Ask for credentials
     # ============================================================
     dialog.ok(
         "[COLOR red]BGTV[/COLOR] Съветник",
-        "PVR клиентът е готов!\n\n"
+        "TVHeadend PVR клиентът е намерен!\n\n"
         "Сега въведете вашите BGTV данни за достъп."
     )
 
@@ -82,17 +71,18 @@ def run():
         return
 
     # ============================================================
-    # STEP 3: Configure TVHeadend with BGTV server details
+    # STEP 3: Enable and configure TVHeadend
     # ============================================================
     pDialog = xbmcgui.DialogProgress()
     pDialog.create("[COLOR red]BGTV[/COLOR] Съветник", "Активиране на PVR клиента...")
     pDialog.update(20)
 
-    xbmc.executebuiltin('EnableAddon(pvr.hts)')
+    # Enable via JSON-RPC (more reliable than executebuiltin)
+    enable_pvr()
     xbmc.sleep(2000)
     pDialog.update(40, "Записване на настройките...")
 
-    # Kodi 20+ multi-instance settings
+    # Kodi 20+ (Nexus/Omega) multi-instance settings
     instance_settings_xml = '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings version="1">
     <setting id="host">{host}</setting>
@@ -130,6 +120,7 @@ def run():
     pDialog.update(60, "Записване на настройките...")
 
     success = True
+    written_paths = []
     for filepath, content in paths_to_write:
         dirpath = os.path.dirname(filepath)
         if not os.path.exists(dirpath):
@@ -137,6 +128,7 @@ def run():
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
+            written_paths.append(filepath)
             xbmc.log("BGTV Setup: Wrote settings to " + filepath, xbmc.LOGINFO)
         except Exception as e:
             xbmc.log("BGTV Setup Error: " + filepath + ": " + str(e), xbmc.LOGERROR)
@@ -147,12 +139,17 @@ def run():
     pDialog.close()
 
     if not success:
-        dialog.ok("Грешка", "Проблем при записване на настройките.")
+        dialog.ok("Грешка", "Проблем при записване на настройките.\nМоля опитайте отново.")
         return
 
+    # Show success with details
     restart = dialog.yesno(
         "Успех! ✅",
-        "BGTV е настроена!\n\nСървър: bgtv.pw\nПотребител: {user}\n\nKodi трябва да се рестартира.\nДа го затворя ли сега?".format(user=username)
+        "BGTV е настроена!\n\n"
+        "Сървър: bgtv.pw\n"
+        "Потребител: {user}\n\n"
+        "Kodi трябва да се рестартира.\n"
+        "Да го затворя ли сега?".format(user=username)
     )
 
     if restart:
