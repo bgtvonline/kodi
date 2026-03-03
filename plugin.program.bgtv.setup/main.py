@@ -124,57 +124,54 @@ def write_settings(username, password):
 
 def try_install_pvr():
     """
-    Try multiple methods to get the user to install pvr.hts.
-    Returns True if pvr.hts becomes available.
+    Try to install pvr.hts and explicitly wait for it to finish.
     """
     dialog = xbmcgui.Dialog()
 
-    # Method 1: Try InstallAddon builtin (works on some platforms)
-    xbmc.log("BGTV Setup: Attempting InstallAddon(pvr.hts)", xbmc.LOGINFO)
-    xbmc.executebuiltin('InstallAddon({})'.format(ADDON_ID))
-    xbmc.sleep(3000)
-
-    if is_pvr_installed():
-        return True
-
-    # Method 2: Try opening the PVR clients category in addon browser
-    # Using multiple ActivateWindow variations for compatibility
-    activate_commands = [
-        'ActivateWindow(AddonBrowser,addons://repos/xbmc.pvrclient/,return)',
-        'ActivateWindow(10040,addons://repos/xbmc.pvrclient/,return)',
-        'ActivateWindow(AddonBrowser,addons://browse/xbmc.pvrclient,return)',
-        'ActivateWindow(10040,addons://browse/xbmc.pvrclient,return)',
-    ]
-
-    dialog.ok(
+    install_now = dialog.yesno(
         "[COLOR red]BGTV[/COLOR] Съветник",
-        "За да гледате телевизия, е нужен PVR клиент.\n\n"
-        "Ще отворя списъка с PVR добавки.\n"
-        "Намерете [COLOR yellow]Tvheadend HTSP Client[/COLOR]\n"
-        "и натиснете [COLOR green]Install[/COLOR].\n\n"
-        "След това стартирайте Съветника отново!"
+        "Липсва TVHeadend клиент.\n"
+        "Сега Kodi ще ви попита дали да инсталира нужните зависимости.\n\n"
+        "Моля, съгласете се (изберете [COLOR green]Yes / OK[/COLOR]) и изчакайте."
     )
 
-    # Try each activation command
-    for cmd in activate_commands:
-        xbmc.log("BGTV Setup: Trying " + cmd, xbmc.LOGINFO)
-        xbmc.executebuiltin(cmd)
-        xbmc.sleep(1500)
+    if not install_now:
+        return False
 
-        # Check if a window actually opened (window ID changed)
-        current_window = xbmcgui.getCurrentWindowId()
-        xbmc.log("BGTV Setup: Current window after command: " + str(current_window), xbmc.LOGINFO)
+    xbmc.log("BGTV Setup: Attempting InstallAddon(pvr.hts)", xbmc.LOGINFO)
+    xbmc.executebuiltin('InstallAddon({})'.format(ADDON_ID))
 
-        # 10040 = AddonBrowser - if we're there, we succeeded
-        if current_window == 10040:
-            xbmc.log("BGTV Setup: AddonBrowser opened successfully", xbmc.LOGINFO)
-            return False  # User needs to manually install, then re-run
+    pDialog = xbmcgui.DialogProgress()
+    pDialog.create("[COLOR red]BGTV[/COLOR]", "Изчакване на инсталацията...")
 
-    # Method 3: Last resort - open Settings > Add-ons directly
-    xbmc.log("BGTV Setup: All ActivateWindow methods failed, opening Settings", xbmc.LOGINFO)
-    xbmc.executebuiltin('ActivateWindow(AddonBrowser)')
-    xbmc.sleep(500)
+    installed = False
+    # Wait up to 60 seconds
+    for i in range(60):
+        if pDialog.iscanceled():
+            break
+        if is_pvr_installed():
+            installed = True
+            break
 
+        pDialog.update(int((i / 60.0) * 100), "Изчакване на инсталацията...\nАко Kodi попита, изберете OK/Yes.")
+        xbmc.sleep(1000)
+
+    pDialog.close()
+
+    if installed:
+        return True
+
+    # Fallback if InstallAddon completely fails
+    dialog.ok(
+        "[COLOR red]BGTV[/COLOR] Съветник",
+        "Автоматичната инсталация не сработи.\n\n"
+        "Ще отворя търсачката за добавки.\n"
+        "Напишете [COLOR yellow]tvheadend[/COLOR] и инсталирайте клиента ръчно.\n\n"
+        "След това пуснете Съветника отново!"
+    )
+    
+    # Safest cross-version fallback command to open Addon search
+    xbmc.executebuiltin('ActivateWindow(10040,"addons://search/",return)')
     return False
 
 
