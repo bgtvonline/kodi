@@ -3,88 +3,66 @@ import xbmc
 import xbmcgui
 import xbmcvfs
 import json
+import time
+
+ADDON_ID = 'pvr.hts'
+HOST = 'bgtv.pw'
+HTTP_PORT = '9981'
+HTSP_PORT = '9982'
+
+
+def jsonrpc(method, params=None):
+    """Execute a JSON-RPC call and return the response dict."""
+    payload = {"jsonrpc": "2.0", "method": method, "id": 1}
+    if params:
+        payload["params"] = params
+    return json.loads(xbmc.executeJSONRPC(json.dumps(payload)))
+
 
 def is_pvr_installed():
-    """Check if pvr.hts is installed using JSON-RPC"""
+    """Check if pvr.hts is installed."""
     try:
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "Addons.GetAddonDetails",
-            "params": {"addonid": "pvr.hts", "properties": ["installed", "enabled"]},
-            "id": 1
-        })
-        response = json.loads(xbmc.executeJSONRPC(request))
-        return 'result' in response
+        resp = jsonrpc("Addons.GetAddonDetails",
+                       {"addonid": ADDON_ID, "properties": ["installed", "enabled"]})
+        return 'result' in resp
     except:
         return False
 
-def enable_pvr():
-    """Enable pvr.hts via JSON-RPC"""
+
+def is_pvr_enabled():
+    """Check if pvr.hts is enabled."""
     try:
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "method": "Addons.SetAddonEnabled",
-            "params": {"addonid": "pvr.hts", "enabled": True},
-            "id": 1
-        })
-        xbmc.executeJSONRPC(request)
+        resp = jsonrpc("Addons.GetAddonDetails",
+                       {"addonid": ADDON_ID, "properties": ["installed", "enabled"]})
+        return resp.get('result', {}).get('addon', {}).get('enabled', False)
+    except:
+        return False
+
+
+def set_pvr_enabled(enabled):
+    """Enable or disable pvr.hts."""
+    try:
+        jsonrpc("Addons.SetAddonEnabled",
+                {"addonid": ADDON_ID, "enabled": enabled})
     except:
         pass
 
-def run():
-    dialog = xbmcgui.Dialog()
 
-    # ============================================================
-    # STEP 1: Check if PVR client is installed
-    # ============================================================
-    if not is_pvr_installed():
-        dialog.ok(
-            "[COLOR red]BGTV[/COLOR] Съветник",
-            "За да гледате телевизия, е нужен PVR клиент.\n\n"
-            "Ще отворя списъка с PVR добавки.\n"
-            "Намерете [COLOR yellow]Tvheadend HTSP Client[/COLOR]\n"
-            "и натиснете [COLOR green]Install[/COLOR].\n\n"
-            "След това стартирайте Съветника отново!"
-        )
-        # Open the PVR clients list in the addon browser
-        # Using multiple fallback paths for compatibility
-        xbmc.executebuiltin('ActivateWindow(10040,addons://browse/xbmc.pvrclient,return)')
-        # Give Kodi time to process the command before script exits
-        xbmc.sleep(2000)
-        return
+def get_addon_data_path():
+    """Get the addon_data path for pvr.hts."""
+    return xbmcvfs.translatePath('special://profile/addon_data/{}/'.format(ADDON_ID))
 
-    # ============================================================
-    # STEP 2: PVR is installed! Ask for credentials
-    # ============================================================
-    dialog.ok(
-        "[COLOR red]BGTV[/COLOR] Съветник",
-        "TVHeadend PVR клиентът е намерен!\n\n"
-        "Сега въведете вашите BGTV данни за достъп."
-    )
 
-    username = dialog.input('Въведете вашето BGTV потребителско име:', type=xbmcgui.INPUT_ALPHANUM)
-    if not username:
-        dialog.ok("Отказано", "Не въведохте потребителско име. Опитайте отново.")
-        return
+def write_settings(username, password):
+    """
+    Write pvr.hts settings to ALL known locations.
+    Covers Kodi 19 (Matrix), 20 (Nexus), and 21 (Omega).
+    """
+    addon_data = get_addon_data_path()
 
-    password = dialog.input('Въведете вашата парола:', type=xbmcgui.INPUT_ALPHANUM, option=xbmcgui.ALPHANUM_HIDE_INPUT)
-    if not password:
-        dialog.ok("Отказано", "Не въведохте парола. Опитайте отново.")
-        return
-
-    # ============================================================
-    # STEP 3: Enable and configure TVHeadend
-    # ============================================================
-    pDialog = xbmcgui.DialogProgress()
-    pDialog.create("[COLOR red]BGTV[/COLOR] Съветник", "Активиране на PVR клиента...")
-    pDialog.update(20)
-
-    enable_pvr()
-    xbmc.sleep(2000)
-    pDialog.update(40, "Записване на настройките...")
-
-    instance_settings_xml = '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<settings version="1">
+    # Kodi 20+ instance-based settings (primary)
+    instance_xml = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings version="2">
     <setting id="host">{host}</setting>
     <setting id="http_port">{http_port}</setting>
     <setting id="htsp_port">{htsp_port}</setting>
@@ -97,59 +75,202 @@ def run():
     <setting id="pretuner_enabled">false</setting>
     <setting id="epg_async">true</setting>
     <setting id="dvr_playstatus">true</setting>
-</settings>'''.format(host='bgtv.pw', http_port='9981', htsp_port='9982', user=username, password=password)
+    <setting id="auto_rec_use_regex">false</setting>
+    <setting id="total_tuners">0</setting>
+    <setting id="pretuner_closedelay">10</setting>
+    <setting id="autorec_approxtime">0</setting>
+    <setting id="autorec_maxdiff">15</setting>
+    <setting id="streaming_protocol">0</setting>
+</settings>""".format(host=HOST, http_port=HTTP_PORT, htsp_port=HTSP_PORT,
+                      user=username, password=password)
 
-    root_settings_xml = '''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<settings version="1">
+    # Legacy root-level settings (Kodi 19 and below, also read by some builds)
+    root_xml = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings version="2">
     <setting id="host">{host}</setting>
     <setting id="http_port">{http_port}</setting>
     <setting id="htsp_port">{htsp_port}</setting>
     <setting id="user">{user}</setting>
     <setting id="pass">{password}</setting>
     <setting id="epg_async">true</setting>
-</settings>'''.format(host='bgtv.pw', http_port='9981', htsp_port='9982', user=username, password=password)
-
-    addon_data = xbmcvfs.translatePath('special://profile/addon_data/pvr.hts/')
+</settings>""".format(host=HOST, http_port=HTTP_PORT, htsp_port=HTSP_PORT,
+                      user=username, password=password)
 
     paths_to_write = [
-        (os.path.join(addon_data, 'instances', 'instance-1', 'settings.xml'), instance_settings_xml),
-        (os.path.join(addon_data, 'settings.xml'), root_settings_xml),
+        # Kodi 20+ primary location
+        (os.path.join(addon_data, 'instances', 'instance-1', 'settings.xml'), instance_xml),
+        # Legacy / fallback location
+        (os.path.join(addon_data, 'settings.xml'), root_xml),
     ]
-
-    pDialog.update(60, "Записване на настройките...")
 
     success = True
     for filepath, content in paths_to_write:
         dirpath = os.path.dirname(filepath)
         if not os.path.exists(dirpath):
-            os.makedirs(dirpath)
+            try:
+                os.makedirs(dirpath)
+            except OSError:
+                pass
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
             xbmc.log("BGTV Setup: Wrote settings to " + filepath, xbmc.LOGINFO)
         except Exception as e:
-            xbmc.log("BGTV Setup Error: " + filepath + ": " + str(e), xbmc.LOGERROR)
+            xbmc.log("BGTV Setup ERROR writing " + filepath + ": " + str(e), xbmc.LOGERROR)
             success = False
 
-    pDialog.update(90, "Почти готово...")
-    xbmc.sleep(1000)
-    pDialog.close()
+    return success
 
-    if not success:
-        dialog.ok("Грешка", "Проблем при записване на настройките.")
-        return
 
-    restart = dialog.yesno(
-        "Успех! ✅",
-        "BGTV е настроена!\n\n"
-        "Сървър: bgtv.pw\n"
-        "Потребител: {user}\n\n"
-        "Kodi трябва да се рестартира.\n"
-        "Да го затворя ли сега?".format(user=username)
+def try_install_pvr():
+    """
+    Try multiple methods to get the user to install pvr.hts.
+    Returns True if pvr.hts becomes available.
+    """
+    dialog = xbmcgui.Dialog()
+
+    # Method 1: Try InstallAddon builtin (works on some platforms)
+    xbmc.log("BGTV Setup: Attempting InstallAddon(pvr.hts)", xbmc.LOGINFO)
+    xbmc.executebuiltin('InstallAddon({})'.format(ADDON_ID))
+    xbmc.sleep(3000)
+
+    if is_pvr_installed():
+        return True
+
+    # Method 2: Try opening the PVR clients category in addon browser
+    # Using multiple ActivateWindow variations for compatibility
+    activate_commands = [
+        'ActivateWindow(AddonBrowser,addons://repos/xbmc.pvrclient/,return)',
+        'ActivateWindow(10040,addons://repos/xbmc.pvrclient/,return)',
+        'ActivateWindow(AddonBrowser,addons://browse/xbmc.pvrclient,return)',
+        'ActivateWindow(10040,addons://browse/xbmc.pvrclient,return)',
+    ]
+
+    dialog.ok(
+        "[COLOR red]BGTV[/COLOR] Съветник",
+        "За да гледате телевизия, е нужен PVR клиент.\n\n"
+        "Ще отворя списъка с PVR добавки.\n"
+        "Намерете [COLOR yellow]Tvheadend HTSP Client[/COLOR]\n"
+        "и натиснете [COLOR green]Install[/COLOR].\n\n"
+        "След това стартирайте Съветника отново!"
     )
 
-    if restart:
+    # Try each activation command
+    for cmd in activate_commands:
+        xbmc.log("BGTV Setup: Trying " + cmd, xbmc.LOGINFO)
+        xbmc.executebuiltin(cmd)
+        xbmc.sleep(1500)
+
+        # Check if a window actually opened (window ID changed)
+        current_window = xbmcgui.getCurrentWindowId()
+        xbmc.log("BGTV Setup: Current window after command: " + str(current_window), xbmc.LOGINFO)
+
+        # 10040 = AddonBrowser - if we're there, we succeeded
+        if current_window == 10040:
+            xbmc.log("BGTV Setup: AddonBrowser opened successfully", xbmc.LOGINFO)
+            return False  # User needs to manually install, then re-run
+
+    # Method 3: Last resort - open Settings > Add-ons directly
+    xbmc.log("BGTV Setup: All ActivateWindow methods failed, opening Settings", xbmc.LOGINFO)
+    xbmc.executebuiltin('ActivateWindow(AddonBrowser)')
+    xbmc.sleep(500)
+
+    return False
+
+
+def run():
+    dialog = xbmcgui.Dialog()
+
+    # ============================================================
+    # STEP 1: Check if PVR client is installed
+    # ============================================================
+    if not is_pvr_installed():
+        installed = try_install_pvr()
+        if not installed:
+            # User was directed to install manually
+            return
+
+    # ============================================================
+    # STEP 2: PVR is installed — disable it before writing settings
+    # ============================================================
+    was_enabled = is_pvr_enabled()
+
+    dialog.ok(
+        "[COLOR red]BGTV[/COLOR] Съветник",
+        "TVHeadend PVR клиентът е намерен!\n\n"
+        "Сега въведете вашите BGTV данни за достъп."
+    )
+
+    username = dialog.input(
+        'Въведете вашето BGTV потребителско име:',
+        type=xbmcgui.INPUT_ALPHANUM
+    )
+    if not username:
+        dialog.ok("Отказано", "Не въведохте потребителско име. Опитайте отново.")
+        return
+
+    password = dialog.input(
+        'Въведете вашата парола:',
+        type=xbmcgui.INPUT_ALPHANUM,
+        option=xbmcgui.ALPHANUM_HIDE_INPUT
+    )
+    if not password:
+        dialog.ok("Отказано", "Не въведохте парола. Опитайте отново.")
+        return
+
+    # ============================================================
+    # STEP 3: Disable PVR, write settings, then re-enable
+    # ============================================================
+    pDialog = xbmcgui.DialogProgress()
+    pDialog.create("[COLOR red]BGTV[/COLOR] Съветник", "Подготовка...")
+    pDialog.update(10)
+
+    # CRITICAL: Disable pvr.hts so it doesn't overwrite our settings
+    if was_enabled:
+        xbmc.log("BGTV Setup: Disabling pvr.hts before writing settings", xbmc.LOGINFO)
+        set_pvr_enabled(False)
+        pDialog.update(20, "Спиране на PVR клиента...")
+        xbmc.sleep(2000)  # Give Kodi time to fully unload the addon
+
+    # Write settings while pvr.hts is stopped
+    pDialog.update(40, "Записване на настройките...")
+    success = write_settings(username, password)
+
+    if not success:
+        pDialog.close()
+        dialog.ok("Грешка", "Проблем при записване на настройките.")
+        # Re-enable if it was enabled before
+        if was_enabled:
+            set_pvr_enabled(True)
+        return
+
+    pDialog.update(60, "Записването е готово...")
+    xbmc.sleep(500)
+
+    # Now re-enable pvr.hts — it will load our freshly written settings
+    pDialog.update(70, "Стартиране на PVR клиента...")
+    set_pvr_enabled(True)
+    xbmc.sleep(3000)  # Give it time to connect to TVHeadend
+
+    pDialog.update(90, "Почти готово...")
+    xbmc.sleep(500)
+    pDialog.close()
+
+    # ============================================================
+    # STEP 4: Offer to verify settings or restart
+    # ============================================================
+    choice = dialog.yesno(
+        "Успех! ✅",
+        "BGTV е настроена!\n\n"
+        "Сървър: {host}\n"
+        "Потребител: {user}\n\n"
+        "Kodi трябва да се рестартира.\n"
+        "Да го затворя ли сега?".format(host=HOST, user=username)
+    )
+
+    if choice:
         xbmc.executebuiltin('Quit')
+
 
 if __name__ == '__main__':
     run()
