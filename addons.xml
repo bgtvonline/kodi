@@ -18,19 +18,23 @@
             </assets>
         </extension>
     </addon>
-    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="2.4.0" provider-name="BGTV">
+    <addon id="service.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="2.5.0" provider-name="BGTV">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
-            <import addon="pvr.hts" />
         </requires>
-        <extension point="xbmc.python.pluginsource" library="main.py">
-            <provides>executable</provides>
-        </extension>
+        <extension point="xbmc.service" library="service.py" start="startup" />
         <extension point="xbmc.addon.metadata">
             <summary lang="bg">Бърза настройка на BGTV (Live TV)</summary>
             <summary lang="en">1-Click BGTV Live TV Setup</summary>
-            <description lang="bg">Този инструмент автоматично настройва TVHeadend PVR добавката за BGTV (bgtv.pw). Просто въведете вашето потребителско име и парола.</description>
+            <description lang="bg">
+      Този инструмент автоматично инсталира и настройва TVHeadend PVR клиента за BGTV (bgtv.pw).
+      Въведете потребителско име и парола, след което Kodi ще се рестартира.
+    </description>
+            <description lang="en">
+      Installs and configures the TVHeadend PVR client for BGTV (bgtv.pw). Enter username/password then Kodi restarts.
+    </description>
             <platform>all</platform>
+            <license>MIT</license>
         </extension>
     </addon>
     <addon id="repository.thecrew" name="[COLOR orchid]THE CREW REPO[/COLOR]" provider-name="The Crew" version="0.3.4">
@@ -160,6 +164,21 @@
             <summary lang="en" />
             <description lang="en" />
             <genre />
+        </extension>
+    </addon>
+    <addon id="plugin.program.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="2.4.0" provider-name="BGTV">
+        <requires>
+            <import addon="xbmc.python" version="3.0.0" />
+            <import addon="pvr.hts" />
+        </requires>
+        <extension point="xbmc.python.pluginsource" library="main.py">
+            <provides>executable</provides>
+        </extension>
+        <extension point="xbmc.addon.metadata">
+            <summary lang="bg">Бърза настройка на BGTV (Live TV)</summary>
+            <summary lang="en">1-Click BGTV Live TV Setup</summary>
+            <description lang="bg">Този инструмент автоматично настройва TVHeadend PVR добавката за BGTV (bgtv.pw). Просто въведете вашето потребителско име и парола.</description>
+            <platform>all</platform>
         </extension>
     </addon>
 </addons>
