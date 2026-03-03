@@ -1,5 +1,6 @@
 # service.bgtv.setup/service.py
 import json
+import re
 import os
 import xbmc
 import xbmcgui
@@ -129,15 +130,29 @@ def wait_for_pvr_install(monitor):
     return False
 
 
-def get_pvr_addon_data_path():
-    # pvr.hts data folder
-    return xbmcvfs.translatePath(f"special://profile/addon_data/{PVR_ADDON_ID}/").replace("\\", "/")
+def _special(path):
+    # Ensure clean VFS path
+    return path.replace("\\", "/")
 
-
-def vfs_write_text(path, text):
+def _vfs_read_text(path):
     try:
-        base = os.path.dirname(path).replace("\\", "/")
-        vfs_mkdirs(base)
+        if not xbmcvfs.exists(path):
+            return ""
+        f = xbmcvfs.File(path)
+        data = f.read()
+        f.close()
+        if isinstance(data, bytes):
+            data = data.decode("utf-8", errors="replace")
+        return data or ""
+    except Exception as e:
+        log(f"Read failed {path}: {e}", xbmc.LOGERROR)
+        return ""
+
+def _vfs_write_text(path, text):
+    try:
+        dirpath = os.path.dirname(path).replace("\\", "/")
+        if not xbmcvfs.exists(dirpath):
+            xbmcvfs.mkdirs(dirpath)
         f = xbmcvfs.File(path, "w")
         try:
             f.write(text.encode("utf-8"))
@@ -149,16 +164,25 @@ def vfs_write_text(path, text):
         log(f"Write failed {path}: {e}", xbmc.LOGERROR)
         return False
 
+def _list_instance_settings():
+    base = _special(f"special://profile/addon_data/{PVR_ADDON_ID}/instances/")
+    out = []
+    try:
+        if xbmcvfs.exists(base):
+            dirs, _files = xbmcvfs.listdir(base)
+            for d in dirs:
+                if d.lower().startswith("instance-"):
+                    out.append(_special(base + d + "/settings.xml"))
+    except Exception as e:
+        log(f"List instances failed: {e}", xbmc.LOGWARNING)
+    return out
 
 def write_pvr_settings(username, password):
     """
-    Write pvr.hts settings using xbmcvfs (cross-platform).
-    Writes:
-      - addon_data/pvr.hts/settings.xml (legacy)
-      - addon_data/pvr.hts/instances/*/settings.xml (Kodi 20+/instance-based)
-      - addon_data/pvr.hts/instances/instance-1/settings.xml (fallback)
+    Hardened: writes to special:// paths + verifies written content.
     """
-    addon_data = get_pvr_addon_data_path()
+    legacy_path = _special(f"special://profile/addon_data/{PVR_ADDON_ID}/settings.xml")
+    instance_default = _special(f"special://profile/addon_data/{PVR_ADDON_ID}/instances/instance-1/settings.xml")
 
     instance_xml = f"""<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings version="2">
@@ -167,17 +191,14 @@ def write_pvr_settings(username, password):
   <setting id="htsp_port">{HTSP_PORT}</setting>
   <setting id="user">{username}</setting>
   <setting id="pass">{password}</setting>
-
   <setting id="connect_timeout">10</setting>
   <setting id="response_timeout">5</setting>
   <setting id="epg_async">true</setting>
-
-  <!-- streaming_protocol: 0 = HTSP in many builds -->
   <setting id="streaming_protocol">0</setting>
 </settings>
 """
 
-    root_xml = f"""<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+    legacy_xml = f"""<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings version="2">
   <setting id="host">{HOST}</setting>
   <setting id="http_port">{HTTP_PORT}</setting>
@@ -188,33 +209,43 @@ def write_pvr_settings(username, password):
 </settings>
 """
 
-    targets = []
+    # Always write legacy
+    targets = [(legacy_path, legacy_xml)]
 
-    # Legacy root
-    targets.append((f"{addon_data}settings.xml", root_xml))
+    # Ensure at least instance-1 exists as a target
+    targets.append((instance_default, instance_xml))
 
-    # Instance-based (Kodi 20+)
-    instances_dir = f"{addon_data}instances"
-    # Always write to instance-1 as a fallback
-    targets.append((f"{addon_data}instances/instance-1/settings.xml", instance_xml))
-
-    # Also write to any existing instances
-    try:
-        if vfs_exists(instances_dir):
-            dirs, _files = xbmcvfs.listdir(instances_dir)
-            for d in dirs:
-                if d.lower().startswith("instance-"):
-                    targets.append((f"{addon_data}instances/{d}/settings.xml", instance_xml))
-    except Exception:
-        pass
+    # Also write to any existing instance settings.xml
+    for p in _list_instance_settings():
+        targets.append((p, instance_xml))
 
     ok = True
     for path, content in targets:
-        path = path.replace("\\", "/")
-        if vfs_write_text(path, content):
-            log(f"Wrote PVR settings: {path}")
+        if _vfs_write_text(path, content):
+            log(f"Wrote settings to {path}")
         else:
             ok = False
+
+    # Verify: host + user appear in at least one instance file (preferred), else legacy
+    def looks_configured(txt):
+        return (HOST in txt) and (f'<setting id="user">{username}</setting>' in txt)
+
+    instance_files = _list_instance_settings()
+    verified = False
+
+    for p in instance_files:
+        if looks_configured(_vfs_read_text(p)):
+            verified = True
+            break
+
+    if not verified:
+        # fallback verification against instance-1 and legacy
+        if looks_configured(_vfs_read_text(instance_default)) or looks_configured(_vfs_read_text(legacy_path)):
+            verified = True
+
+    if not verified:
+        log("Settings write verification FAILED: Kodi is not seeing bgtv.pw/user in settings files.", xbmc.LOGERROR)
+        ok = False
 
     return ok
 
@@ -300,6 +331,12 @@ def run_wizard():
             except Exception:
                 pass
             return
+
+    # Ensure pvr.hts is enabled at least once so instances get created
+    if not pvr_enabled():
+        log("Enabling pvr.hts to let instance folders generate...")
+        set_pvr_enabled(True)
+        xbmc.sleep(3000)
 
     # --- Step 2: Ask for credentials ---
     dialog.ok(
