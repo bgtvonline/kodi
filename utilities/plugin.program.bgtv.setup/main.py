@@ -124,53 +124,20 @@ def write_settings(username, password):
 
 def try_install_pvr():
     """
-    Try to install pvr.hts and explicitly wait for it to finish.
+    Fallback: Should rarely be hit now that pvr.hts is a required dependency in addon.xml.
+    If hit, it means the dependency resolution failed (e.g., repository is missing the client).
     """
     dialog = xbmcgui.Dialog()
 
-    install_now = dialog.yesno(
-        "[COLOR red]BGTV[/COLOR] Съветник",
-        "Липсва TVHeadend клиент.\n"
-        "Сега Kodi ще ви попита дали да инсталира нужните зависимости.\n\n"
-        "Моля, съгласете се (изберете [COLOR green]Yes / OK[/COLOR]) и изчакайте."
-    )
-
-    if not install_now:
-        return False
-
-    xbmc.log("BGTV Setup: Attempting InstallAddon(pvr.hts)", xbmc.LOGINFO)
-    xbmc.executebuiltin('InstallAddon({})'.format(ADDON_ID))
-
-    pDialog = xbmcgui.DialogProgress()
-    pDialog.create("[COLOR red]BGTV[/COLOR]", "Изчакване на инсталацията...")
-
-    installed = False
-    # Wait up to 60 seconds
-    for i in range(60):
-        if pDialog.iscanceled():
-            break
-        if is_pvr_installed():
-            installed = True
-            break
-
-        pDialog.update(int((i / 60.0) * 100), "Изчакване на инсталацията...\nАко Kodi попита, изберете OK/Yes.")
-        xbmc.sleep(1000)
-
-    pDialog.close()
-
-    if installed:
-        return True
-
-    # Fallback if InstallAddon completely fails
     dialog.ok(
         "[COLOR red]BGTV[/COLOR] Съветник",
-        "Автоматичната инсталация не сработи.\n\n"
-        "Ще отворя търсачката за добавки.\n"
-        "Напишете [COLOR yellow]tvheadend[/COLOR] и инсталирайте клиента ръчно.\n\n"
-        "След това пуснете Съветника отново!"
+        "Липсва TVHeadend клиент.\n\n"
+        "Опитахме да го инсталираме автоматично, но устройството ви може "
+        "да изисква ръчна инсталация.\n\n"
+        "Ще отворя търсачката. Напишете [COLOR yellow]tvheadend[/COLOR]\n"
+        "отворете го и натиснете [COLOR green]Install[/COLOR]."
     )
     
-    # Safest cross-version fallback command to open Addon search
     xbmc.executebuiltin('ActivateWindow(10040,"addons://search/",return)')
     return False
 
