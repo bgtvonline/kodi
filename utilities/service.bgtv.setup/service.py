@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 # service.bgtv.setup/service.py
+
 import json
-import re
 import os
 import xbmc
 import xbmcgui
@@ -10,14 +11,14 @@ import xbmcaddon
 ADDON_ID = "service.bgtv.setup"
 PVR_ADDON_ID = "pvr.hts"
 
-# BGTV / TVHeadend endpoint
+# TVHeadend endpoint
 HOST = "bgtv.pw"
 HTTP_PORT = "9981"
 HTSP_PORT = "9982"
 
-# Timing
-INSTALL_WAIT_SECONDS = 120
-CONNECT_SETTLE_MS = 3000
+# --- timing (keep modest; we avoid long waits) ---
+BOOT_SETTLE_MS = 3000
+AFTER_ENABLE_MS = 4000
 
 
 def log(msg, level=xbmc.LOGINFO):
@@ -32,37 +33,24 @@ def jsonrpc(method, params=None):
     try:
         return json.loads(raw)
     except Exception:
-        return {"error": {"message": "Invalid JSON-RPC response"}, "raw": raw}
+        return {"error": {"message": "Invalid JSON-RPC"}, "raw": raw}
 
 
-def addon_data_path():
-    # e.g. special://profile/addon_data/service.bgtv.setup/
-    return xbmcvfs.translatePath(f"special://profile/addon_data/{ADDON_ID}/").replace("\\", "/")
+def vfs_path(path):
+    return path.replace("\\", "/")
 
 
-def state_file_path():
-    return (addon_data_path() + "state.json").replace("\\", "/")
+def addon_data_dir():
+    return vfs_path(xbmcvfs.translatePath(f"special://profile/addon_data/{ADDON_ID}/"))
 
 
-def vfs_exists(path):
-    try:
-        return xbmcvfs.exists(path)
-    except Exception:
-        return False
-
-
-def vfs_mkdirs(path):
-    try:
-        if not xbmcvfs.exists(path):
-            return xbmcvfs.mkdirs(path)
-        return True
-    except Exception:
-        return False
+def state_path():
+    return vfs_path(os.path.join(addon_data_dir(), "state.json"))
 
 
 def vfs_read_json(path, default):
     try:
-        if not vfs_exists(path):
+        if not xbmcvfs.exists(path):
             return default
         f = xbmcvfs.File(path)
         data = f.read()
@@ -71,17 +59,17 @@ def vfs_read_json(path, default):
             data = data.decode("utf-8", errors="replace")
         return json.loads(data) if data else default
     except Exception as e:
-        log(f"Failed to read state file: {e}", xbmc.LOGWARNING)
+        log(f"Failed reading state: {e}", xbmc.LOGWARNING)
         return default
 
 
 def vfs_write_json(path, obj):
     try:
-        base = os.path.dirname(path).replace("\\", "/")
-        vfs_mkdirs(base)
+        d = os.path.dirname(path)
+        if not xbmcvfs.exists(d):
+            xbmcvfs.mkdirs(d)
         s = json.dumps(obj, ensure_ascii=False, indent=2)
         f = xbmcvfs.File(path, "w")
-        # xbmcvfs.File can require bytes on some platforms
         try:
             f.write(s.encode("utf-8"))
         except Exception:
@@ -89,23 +77,22 @@ def vfs_write_json(path, obj):
         f.close()
         return True
     except Exception as e:
-        log(f"Failed to write state file: {e}", xbmc.LOGERROR)
+        log(f"Failed writing state: {e}", xbmc.LOGERROR)
         return False
 
 
 def pvr_present():
-    # Treat “addon details returned” as present/installed.
     try:
-        resp = jsonrpc("Addons.GetAddonDetails", {"addonid": PVR_ADDON_ID, "properties": ["enabled"]})
-        return "result" in resp and resp["result"].get("addon") is not None
+        r = jsonrpc("Addons.GetAddonDetails", {"addonid": PVR_ADDON_ID, "properties": ["enabled"]})
+        return "result" in r and r["result"].get("addon") is not None
     except Exception:
         return False
 
 
 def pvr_enabled():
     try:
-        resp = jsonrpc("Addons.GetAddonDetails", {"addonid": PVR_ADDON_ID, "properties": ["enabled"]})
-        return bool(resp.get("result", {}).get("addon", {}).get("enabled", False))
+        r = jsonrpc("Addons.GetAddonDetails", {"addonid": PVR_ADDON_ID, "properties": ["enabled"]})
+        return bool(r.get("result", {}).get("addon", {}).get("enabled", False))
     except Exception:
         return False
 
@@ -113,203 +100,14 @@ def pvr_enabled():
 def set_pvr_enabled(enabled):
     try:
         jsonrpc("Addons.SetAddonEnabled", {"addonid": PVR_ADDON_ID, "enabled": bool(enabled)})
+        log(f"Set pvr.hts enabled={enabled}")
         return True
     except Exception as e:
         log(f"SetAddonEnabled failed: {e}", xbmc.LOGWARNING)
         return False
 
 
-def wait_for_pvr_install(monitor):
-    # Wait until pvr.hts shows up as present
-    for i in range(INSTALL_WAIT_SECONDS):
-        if monitor.abortRequested():
-            return False
-        if pvr_present():
-            return True
-        xbmc.sleep(1000)
-    return False
-
-
-def _special(path):
-    # Ensure clean VFS path
-    return path.replace("\\", "/")
-
-def _vfs_read_text(path):
-    try:
-        if not xbmcvfs.exists(path):
-            return ""
-        f = xbmcvfs.File(path)
-        data = f.read()
-        f.close()
-        if isinstance(data, bytes):
-            data = data.decode("utf-8", errors="replace")
-        return data or ""
-    except Exception as e:
-        log(f"Read failed {path}: {e}", xbmc.LOGERROR)
-        return ""
-
-def _vfs_write_text(path, text):
-    try:
-        dirpath = os.path.dirname(path).replace("\\", "/")
-        if not xbmcvfs.exists(dirpath):
-            xbmcvfs.mkdirs(dirpath)
-        f = xbmcvfs.File(path, "w")
-        try:
-            f.write(text.encode("utf-8"))
-        except Exception:
-            f.write(text)
-        f.close()
-        return True
-    except Exception as e:
-        log(f"Write failed {path}: {e}", xbmc.LOGERROR)
-        return False
-
-def _list_instance_settings():
-    base = _special(f"special://profile/addon_data/{PVR_ADDON_ID}/instances/")
-    out = []
-    try:
-        if xbmcvfs.exists(base):
-            dirs, _files = xbmcvfs.listdir(base)
-            for d in dirs:
-                if d.lower().startswith("instance-"):
-                    out.append(_special(base + d + "/settings.xml"))
-    except Exception as e:
-        log(f"List instances failed: {e}", xbmc.LOGWARNING)
-    return out
-
-def write_pvr_settings(username, password):
-    """
-    Hardened: writes to special:// paths + verifies written content.
-    """
-    legacy_path = _special(f"special://profile/addon_data/{PVR_ADDON_ID}/settings.xml")
-    instance_default = _special(f"special://profile/addon_data/{PVR_ADDON_ID}/instances/instance-1/settings.xml")
-
-    instance_xml = f"""<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<settings version="2">
-  <setting id="host">{HOST}</setting>
-  <setting id="http_port">{HTTP_PORT}</setting>
-  <setting id="htsp_port">{HTSP_PORT}</setting>
-  <setting id="user">{username}</setting>
-  <setting id="pass">{password}</setting>
-  <setting id="connect_timeout">10</setting>
-  <setting id="response_timeout">5</setting>
-  <setting id="epg_async">true</setting>
-  <setting id="streaming_protocol">0</setting>
-</settings>
-"""
-
-    legacy_xml = f"""<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<settings version="2">
-  <setting id="host">{HOST}</setting>
-  <setting id="http_port">{HTTP_PORT}</setting>
-  <setting id="htsp_port">{HTSP_PORT}</setting>
-  <setting id="user">{username}</setting>
-  <setting id="pass">{password}</setting>
-  <setting id="epg_async">true</setting>
-</settings>
-"""
-
-    # Always write legacy
-    targets = [(legacy_path, legacy_xml)]
-
-    # Ensure at least instance-1 exists as a target
-    targets.append((instance_default, instance_xml))
-
-    # Also write to any existing instance settings.xml
-    for p in _list_instance_settings():
-        targets.append((p, instance_xml))
-
-    ok = True
-    for path, content in targets:
-        if _vfs_write_text(path, content):
-            log(f"Wrote settings to {path}")
-        else:
-            ok = False
-
-    # Verify: host + user appear in at least one instance file (preferred), else legacy
-    def looks_configured(txt):
-        return (HOST in txt) and (f'<setting id="user">{username}</setting>' in txt)
-
-    instance_files = _list_instance_settings()
-    verified = False
-
-    for p in instance_files:
-        if looks_configured(_vfs_read_text(p)):
-            verified = True
-            break
-
-    if not verified:
-        # fallback verification against instance-1 and legacy
-        if looks_configured(_vfs_read_text(instance_default)) or looks_configured(_vfs_read_text(legacy_path)):
-            verified = True
-
-    if not verified:
-        log("Settings write verification FAILED: Kodi is not seeing bgtv.pw/user in settings files.", xbmc.LOGERROR)
-        ok = False
-
-    return ok
-
-
-def set_pvr_setting(key, value):
-    """
-    Best-effort: set pvr.hts setting via Kodi addon settings API.
-    This is often more reliable than writing XML manually on Kodi 20/21.
-    """
-    try:
-        a = xbmcaddon.Addon(PVR_ADDON_ID)
-        # Kodi 19+ supports setSettingString, older uses setSetting
-        if hasattr(a, "setSettingString"):
-            a.setSettingString(key, str(value))
-        else:
-            a.setSetting(key, str(value))
-        log(f"Set pvr.hts setting: {key}={value}")
-        return True
-    except Exception as e:
-        log(f"Failed to set pvr.hts setting {key}: {e}", xbmc.LOGWARNING)
-        return False
-
-
-def apply_pvr_settings(username, password):
-    """
-    Apply settings using the API first; fall back to XML write.
-    """
-    ok_api = True
-    ok_api &= set_pvr_setting("host", HOST)
-    ok_api &= set_pvr_setting("http_port", str(HTTP_PORT))
-    ok_api &= set_pvr_setting("htsp_port", str(HTSP_PORT))
-    ok_api &= set_pvr_setting("user", username)
-    ok_api &= set_pvr_setting("pass", password)
-
-    # Some builds use these ids; harmless if ignored
-    set_pvr_setting("epg_async", "true")
-    set_pvr_setting("connect_timeout", "10")
-    set_pvr_setting("response_timeout", "5")
-
-    # If API worked, return True. If it failed, try XML fallback.
-    if ok_api:
-        return True
-
-    # Fallback: XML write (hardened version)
-    return write_pvr_settings(username, password)
-
-
-def activate_tv_section():
-    # Builtins differ a bit by skin/version; try a few.
-    candidates = [
-        "ActivateWindow(TVChannels)",
-        "ActivateWindow(TVGuide)",
-        "ActivateWindow(TVRecordings)",
-    ]
-    for c in candidates:
-        try:
-            xbmc.executebuiltin(c)
-            return True
-        except Exception:
-            continue
-    return False
-
-
-def get_pvr_setting(key):
+def pvr_get_setting(key):
     try:
         a = xbmcaddon.Addon(PVR_ADDON_ID)
         if hasattr(a, "getSettingString"):
@@ -319,177 +117,222 @@ def get_pvr_setting(key):
         return ""
 
 
-def is_really_configured():
-    """Check if pvr.hts actually has bgtv.pw as host and a non-empty user."""
-    host = get_pvr_setting("host") or ""
-    user = get_pvr_setting("user") or ""
-    return (host.strip().lower() == HOST.lower()) and (user.strip() != "")
+def pvr_set_setting(key, value):
+    try:
+        a = xbmcaddon.Addon(PVR_ADDON_ID)
+        if hasattr(a, "setSettingString"):
+            a.setSettingString(key, str(value))
+        else:
+            a.setSetting(key, str(value))
+        log(f"Set pvr.hts setting {key}={value}")
+        return True
+    except Exception as e:
+        log(f"Failed to set pvr.hts setting {key}: {e}", xbmc.LOGWARNING)
+        return False
 
 
-def run_wizard():
-    monitor = xbmc.Monitor()
+def is_really_configured(expected_user=None):
+    """
+    Do NOT trust our state file. Check pvr.hts actual settings.
+    """
+    host = (pvr_get_setting("host") or "").strip().lower()
+    user = (pvr_get_setting("user") or "").strip()
+    if host != HOST.lower():
+        return False
+    if not user:
+        return False
+    if expected_user and user != expected_user:
+        # optional strictness; usually keep false to allow user changes later
+        return False
+    return True
+
+
+def ensure_install_flow(state):
+    """
+    Production approach:
+    - If missing and we haven't requested install -> trigger InstallAddon + set install_pending + exit.
+    - If install_pending and still missing -> exit quietly (Kodi is still doing its thing).
+    - If now present -> clear install_pending and continue.
+    """
     dialog = xbmcgui.Dialog()
 
-    # Load state
-    state_path = state_file_path()
-    state = vfs_read_json(state_path, default={
+    if pvr_present():
+        if state.get("install_pending"):
+            state["install_pending"] = False
+        return True
+
+    if state.get("install_pending"):
+        # Don't spam dialogs; Kodi may still be downloading or waiting for prompts.
+        dialog.notification("BGTV", "Installing TVHeadend client... (accept Kodi prompts)", xbmcgui.NOTIFICATION_INFO, 5000)
+        return False
+
+    # First time: ask permission, then trigger install and exit.
+    if not dialog.yesno(
+        "BGTV Setup",
+        "TVHeadend HTSP Client is required.\n\n"
+        "Kodi will download it now.\n"
+        "If Kodi asks for dependencies, press YES/OK.\n\n"
+        "Start download?"
+    ):
+        return False
+
+    log("Triggering InstallAddon(pvr.hts)")
+    xbmc.executebuiltin(f"InstallAddon({PVR_ADDON_ID})")
+
+    state["install_pending"] = True
+
+    dialog.ok(
+        "BGTV Setup",
+        "Download started.\n\n"
+        "If Kodi shows prompts, press YES/OK.\n\n"
+        "When finished, restart Kodi (recommended) and BGTV Setup will continue."
+    )
+    return False
+
+
+def apply_settings(username, password):
+    """
+    Use the addon settings API (best on Kodi 20/21).
+    """
+    ok = True
+    ok &= pvr_set_setting("host", HOST)
+    ok &= pvr_set_setting("http_port", HTTP_PORT)
+    ok &= pvr_set_setting("htsp_port", HTSP_PORT)
+    ok &= pvr_set_setting("user", username)
+    ok &= pvr_set_setting("pass", password)
+
+    # harmless extras (ignored if not supported)
+    pvr_set_setting("epg_async", "true")
+    pvr_set_setting("connect_timeout", "10")
+    pvr_set_setting("response_timeout", "5")
+
+    return ok
+
+
+def activate_tv():
+    # Try common windows. (Skins vary; we just best-effort.)
+    for cmd in ("ActivateWindow(TVChannels)", "ActivateWindow(TVGuide)"):
+        try:
+            xbmc.executebuiltin(cmd)
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def wait_boot_settle(monitor):
+    # Give Kodi time to bring up GUI / JSONRPC etc.
+    xbmc.sleep(BOOT_SETTLE_MS)
+    # wait a bit more if still starting
+    for _ in range(10):
+        if monitor.abortRequested():
+            return
+        # when GUI is up, home window is typically visible
+        if xbmc.getCondVisibility("Window.IsVisible(home)"):
+            break
+        xbmc.sleep(500)
+
+
+def run():
+    monitor = xbmc.Monitor()
+    wait_boot_settle(monitor)
+
+    spath = state_path()
+    state = vfs_read_json(spath, default={
         "configured": False,
+        "install_pending": False,
         "needs_enable_on_next_boot": False,
-        "open_tv_pending": False
+        "open_tv_pending": False,
     })
 
-    # =====================================================
-    # BOOT B: If we need to enable pvr.hts after restart
-    # =====================================================
-    if state.get("configured") and state.get("needs_enable_on_next_boot"):
-        log("Boot B: Enabling pvr.hts after restart...")
-        set_pvr_enabled(True)
-        xbmc.sleep(4000)  # Let it connect to bgtv.pw
-        state["needs_enable_on_next_boot"] = False
-        state["open_tv_pending"] = False
-        vfs_write_json(state_path, state)
-        log("pvr.hts enabled with correct settings. Opening TV.")
-        activate_tv_section()
-        return
-
-    # If configured and TV pending (legacy state)
-    if state.get("configured") and state.get("open_tv_pending"):
-        log("Configured already; opening TV section once.")
-        xbmc.sleep(1500)
-        activate_tv_section()
-        state["open_tv_pending"] = False
-        vfs_write_json(state_path, state)
-        return
-
-    # If state says configured, verify pvr.hts actually has bgtv.pw
+    # If state claims configured but pvr.hts is NOT actually pointing to bgtv.pw -> reset state
     if state.get("configured") and not is_really_configured():
         log("State says configured, but pvr.hts settings are not applied. Resetting state.")
-        state["configured"] = False
-        state["open_tv_pending"] = False
-        state["needs_enable_on_next_boot"] = False
-        vfs_write_json(state_path, state)
-        # Fall through to run setup again
+        state.update({
+            "configured": False,
+            "install_pending": False,
+            "needs_enable_on_next_boot": False,
+            "open_tv_pending": False,
+        })
+        vfs_write_json(spath, state)
 
-    # If truly configured and working, do nothing
+    # If we are in "enable after reboot" phase, do it now
+    if state.get("configured") and state.get("needs_enable_on_next_boot"):
+        log("Phase B: enabling pvr.hts after reboot")
+        set_pvr_enabled(True)
+        xbmc.sleep(AFTER_ENABLE_MS)
+        state["needs_enable_on_next_boot"] = False
+        vfs_write_json(spath, state)
+
+        # Open TV once (optional)
+        if state.get("open_tv_pending"):
+            xbmc.sleep(1000)
+            activate_tv()
+            state["open_tv_pending"] = False
+            vfs_write_json(spath, state)
+        return
+
+    # If already configured and nothing pending, optionally open TV once
+    if state.get("configured") and state.get("open_tv_pending"):
+        log("Configured already; opening TV section once.")
+        xbmc.sleep(1000)
+        activate_tv()
+        state["open_tv_pending"] = False
+        vfs_write_json(spath, state)
+        return
+
     if state.get("configured"):
         return
 
-    # =====================================================
-    # BOOT A: Setup flow
-    # =====================================================
+    # --- Phase A: ensure pvr installed (non-blocking, no timeouts) ---
+    if not ensure_install_flow(state):
+        vfs_write_json(spath, state)
+        return
 
-    # --- Step 1: Ensure PVR installed ---
-    if not pvr_present():
-        install_now = dialog.yesno(
-            "[COLOR red]BGTV[/COLOR] Setup",
-            "TVHeadend client (pvr.hts) is missing.\n\n"
-            "Install it now? Kodi may ask to install dependencies.\n\n"
-            "Choose [COLOR green]Yes[/COLOR] and accept any prompts."
-        )
-        if not install_now:
-            return
-
-        log("Triggering InstallAddon(pvr.hts)")
-        xbmc.executebuiltin(f"InstallAddon({PVR_ADDON_ID})")
-
-        p = xbmcgui.DialogProgress()
-        p.create("[COLOR red]BGTV[/COLOR]", "Installing TVHeadend client...")
-        installed = False
-
-        for i in range(INSTALL_WAIT_SECONDS):
-            if monitor.abortRequested() or p.iscanceled():
-                break
-            if pvr_present():
-                installed = True
-                break
-            pct = int((i / float(INSTALL_WAIT_SECONDS)) * 100)
-            p.update(pct, "Installing...\nIf Kodi asks, select OK/Yes.")
-            xbmc.sleep(1000)
-
-        p.close()
-
-        if not installed:
-            dialog.ok(
-                "[COLOR red]BGTV[/COLOR] Setup",
-                "Automatic install did not complete.\n\n"
-                "Please install manually:\n"
-                "Add-ons \u2192 Download \u2192 PVR clients \u2192 TVHeadend HTSP Client\n\n"
-                "Then restart Kodi."
-            )
-            try:
-                xbmc.executebuiltin('ActivateWindow(10040,"addons://search/",return)')
-            except Exception:
-                pass
-            return
-
-    # Immediately disable pvr.hts so it can't start with 127.0.0.1 defaults
-    log("Disabling pvr.hts immediately to prevent default init")
+    # Immediately disable pvr.hts (prevents it starting with defaults / early PVR Manager race)
     set_pvr_enabled(False)
-    xbmc.sleep(1500)
+    xbmc.sleep(1200)
 
-    # --- Step 2: Ask for credentials ---
-    dialog.ok(
-        "[COLOR red]BGTV[/COLOR] Setup",
-        "TVHeadend client found.\n\n"
-        "Enter your BGTV username and password."
-    )
+    # Ask for credentials
+    dialog = xbmcgui.Dialog()
+    dialog.ok("BGTV Setup", "Enter your BGTV username and password.")
 
     username = dialog.input("BGTV username:", type=xbmcgui.INPUT_ALPHANUM)
     if not username:
         dialog.ok("Cancelled", "No username entered.")
         return
 
-    password = dialog.input(
-        "BGTV password:",
-        type=xbmcgui.INPUT_ALPHANUM,
-        option=xbmcgui.ALPHANUM_HIDE_INPUT
-    )
+    password = dialog.input("BGTV password:", type=xbmcgui.INPUT_ALPHANUM, option=xbmcgui.ALPHANUM_HIDE_INPUT)
     if not password:
         dialog.ok("Cancelled", "No password entered.")
         return
 
-    # --- Step 3: Apply settings (API first, XML fallback) ---
-    # pvr.hts is already disabled, safe to write
-    prog = xbmcgui.DialogProgress()
-    prog.create("[COLOR red]BGTV[/COLOR] Setup", "Writing settings...")
-    prog.update(30, "Writing settings...")
-
-    ok = apply_pvr_settings(username, password)
-    if not ok:
-        prog.close()
-        dialog.ok("Error", "Failed to apply TVHeadend settings.")
+    # Apply settings while pvr is disabled
+    if not apply_settings(username, password):
+        dialog.ok("Error", "Failed to apply TVHeadend settings. Check Kodi log for [BGTV Setup].")
         return
 
-    prog.update(60, "Settings saved...")
-    xbmc.sleep(500)
+    # Verify we actually changed host/user
+    if not is_really_configured():
+        dialog.ok("Error", "Settings did not stick (still not set to bgtv.pw). Check Kodi log for [BGTV Setup].")
+        return
 
-    # --- Step 4: KEEP pvr.hts DISABLED, mark for next boot ---
-    # CRITICAL: Do NOT enable pvr.hts now. It will start with defaults.
-    # On next boot, our service will enable it BEFORE PVR Manager starts it.
+    # CRITICAL: keep pvr disabled now, and enable only after reboot (prevents 127.0.0.1 race)
     set_pvr_enabled(False)
-    xbmc.sleep(1000)
+    xbmc.sleep(600)
 
+    # Mark state for next boot
     state["configured"] = True
     state["needs_enable_on_next_boot"] = True
     state["open_tv_pending"] = True
-    vfs_write_json(state_path, state)
+    vfs_write_json(spath, state)
 
-    prog.update(100, "Done!")
-    xbmc.sleep(500)
-    prog.close()
-
-    # --- Step 5: Force restart ---
-    dialog.ok(
-        "BGTV \u2714",
-        f"Settings saved!\n\nServer: {HOST}\nUser: {username}\n\n"
-        "Kodi MUST restart now to apply the settings.\n"
-        "Live TV will appear after restart."
-    )
+    dialog.ok("BGTV Setup", "Settings saved.\n\nKodi will now restart to start Live TV.")
     xbmc.executebuiltin("Quit")
 
 
 if __name__ == "__main__":
     try:
-        run_wizard()
+        run()
     except Exception as e:
         log(f"Fatal error: {e}", xbmc.LOGERROR)
