@@ -192,7 +192,7 @@ def ensure_install_flow(state):
 
 def apply_settings(username, password):
     """
-    Use the addon settings API (best on Kodi 20/21).
+    Try API first (requires pvr.hts enabled), fall back to XML.
     """
     ok = True
     ok &= pvr_set_setting("host", HOST)
@@ -201,12 +201,85 @@ def apply_settings(username, password):
     ok &= pvr_set_setting("user", username)
     ok &= pvr_set_setting("pass", password)
 
-    # harmless extras (ignored if not supported)
     pvr_set_setting("epg_async", "true")
     pvr_set_setting("connect_timeout", "10")
     pvr_set_setting("response_timeout", "5")
 
     return ok
+
+
+def vfs_write_text(path, text):
+    try:
+        d = os.path.dirname(path).replace("\\", "/")
+        if not xbmcvfs.exists(d):
+            xbmcvfs.mkdirs(d)
+        f = xbmcvfs.File(path, "w")
+        try:
+            f.write(text.encode("utf-8"))
+        except Exception:
+            f.write(text)
+        f.close()
+        log(f"Wrote {path}")
+        return True
+    except Exception as e:
+        log(f"Write failed {path}: {e}", xbmc.LOGERROR)
+        return False
+
+
+def vfs_read_text(path):
+    try:
+        if not xbmcvfs.exists(path):
+            return ""
+        f = xbmcvfs.File(path)
+        data = f.read()
+        f.close()
+        if isinstance(data, bytes):
+            data = data.decode("utf-8", errors="replace")
+        return data or ""
+    except Exception:
+        return ""
+
+
+def apply_settings_xml(username, password):
+    """Write settings.xml directly via xbmcvfs. Works even when pvr.hts is disabled."""
+    instance_path = f"special://profile/addon_data/{PVR_ADDON_ID}/instances/instance-1/settings.xml"
+    legacy_path   = f"special://profile/addon_data/{PVR_ADDON_ID}/settings.xml"
+
+    instance_xml = f"""<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings version="2">
+  <setting id="host">{HOST}</setting>
+  <setting id="http_port">{HTTP_PORT}</setting>
+  <setting id="htsp_port">{HTSP_PORT}</setting>
+  <setting id="user">{username}</setting>
+  <setting id="pass">{password}</setting>
+  <setting id="connect_timeout">10</setting>
+  <setting id="response_timeout">5</setting>
+  <setting id="epg_async">true</setting>
+</settings>
+"""
+
+    legacy_xml = f"""<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings version="2">
+  <setting id="host">{HOST}</setting>
+  <setting id="http_port">{HTTP_PORT}</setting>
+  <setting id="htsp_port">{HTSP_PORT}</setting>
+  <setting id="user">{username}</setting>
+  <setting id="pass">{password}</setting>
+  <setting id="epg_async">true</setting>
+</settings>
+"""
+
+    ok1 = vfs_write_text(instance_path, instance_xml)
+    ok2 = vfs_write_text(legacy_path, legacy_xml)
+
+    # Verify it really stuck (at least instance-1)
+    txt = vfs_read_text(instance_path)
+    verified = (HOST in txt) and (f'<setting id="user">{username}</setting>' in txt)
+
+    if not verified:
+        log("Verification FAILED: instance-1 settings.xml does not contain expected host/user", xbmc.LOGERROR)
+
+    return ok1 and ok2 and verified
 
 
 def activate_tv():
@@ -289,9 +362,9 @@ def run():
         vfs_write_json(spath, state)
         return
 
-    # Immediately disable pvr.hts (prevents it starting with defaults / early PVR Manager race)
+    # Disable pvr.hts first so it stops running with 127.0.0.1 defaults
     set_pvr_enabled(False)
-    xbmc.sleep(1200)
+    xbmc.sleep(1500)
 
     # Ask for credentials
     dialog = xbmcgui.Dialog()
@@ -307,19 +380,16 @@ def run():
         dialog.ok("Cancelled", "No password entered.")
         return
 
-    # Apply settings while pvr is disabled
-    if not apply_settings(username, password):
-        dialog.ok("Error", "Failed to apply TVHeadend settings. Check Kodi log for [BGTV Setup].")
+    # Write settings via XML (works even when pvr.hts is disabled)
+    log("Writing settings via XML while pvr.hts is disabled")
+    ok = apply_settings_xml(username, password)
+    if not ok:
+        dialog.ok("BGTV Setup", "Failed to write settings.xml (see Kodi log).")
         return
 
-    # Verify we actually changed host/user
-    if not is_really_configured():
-        dialog.ok("Error", "Settings did not stick (still not set to bgtv.pw). Check Kodi log for [BGTV Setup].")
-        return
-
-    # CRITICAL: keep pvr disabled now, and enable only after reboot (prevents 127.0.0.1 race)
+    # Keep pvr.hts disabled. On next boot our service enables it with correct settings.
     set_pvr_enabled(False)
-    xbmc.sleep(600)
+    xbmc.sleep(1000)
 
     # Mark state for next boot
     state["configured"] = True

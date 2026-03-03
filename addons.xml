@@ -18,9 +18,9 @@
             </assets>
         </extension>
     </addon>
-    <addon id="service.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="3.0.0" provider-name="BGTV">
+    <addon id="service.bgtv.setup" name="[COLOR red]BGTV[/COLOR] Съветник за Настройка" version="3.1.0" provider-name="BGTV">
         <requires>
-            <import addon="xbmc.python" version="3.0.0" />
+            <import addon="xbmc.python" version="3.1.0" />
         </requires>
         <extension point="xbmc.service" library="service.py" start="startup" />
         <extension point="xbmc.addon.metadata">
