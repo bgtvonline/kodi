@@ -250,6 +250,49 @@ def write_pvr_settings(username, password):
     return ok
 
 
+def set_pvr_setting(key, value):
+    """
+    Best-effort: set pvr.hts setting via Kodi addon settings API.
+    This is often more reliable than writing XML manually on Kodi 20/21.
+    """
+    try:
+        a = xbmcaddon.Addon(PVR_ADDON_ID)
+        # Kodi 19+ supports setSettingString, older uses setSetting
+        if hasattr(a, "setSettingString"):
+            a.setSettingString(key, str(value))
+        else:
+            a.setSetting(key, str(value))
+        log(f"Set pvr.hts setting: {key}={value}")
+        return True
+    except Exception as e:
+        log(f"Failed to set pvr.hts setting {key}: {e}", xbmc.LOGWARNING)
+        return False
+
+
+def apply_pvr_settings(username, password):
+    """
+    Apply settings using the API first; fall back to XML write.
+    """
+    ok_api = True
+    ok_api &= set_pvr_setting("host", HOST)
+    ok_api &= set_pvr_setting("http_port", str(HTTP_PORT))
+    ok_api &= set_pvr_setting("htsp_port", str(HTSP_PORT))
+    ok_api &= set_pvr_setting("user", username)
+    ok_api &= set_pvr_setting("pass", password)
+
+    # Some builds use these ids; harmless if ignored
+    set_pvr_setting("epg_async", "true")
+    set_pvr_setting("connect_timeout", "10")
+    set_pvr_setting("response_timeout", "5")
+
+    # If API worked, return True. If it failed, try XML fallback.
+    if ok_api:
+        return True
+
+    # Fallback: XML write (hardened version)
+    return write_pvr_settings(username, password)
+
+
 def activate_tv_section():
     # Builtins differ a bit by skin/version; try a few.
     candidates = [
@@ -332,11 +375,12 @@ def run_wizard():
                 pass
             return
 
-    # Ensure pvr.hts is enabled at least once so instances get created
-    if not pvr_enabled():
-        log("Enabling pvr.hts to let instance folders generate...")
-        set_pvr_enabled(True)
-        xbmc.sleep(3000)
+    # Immediately disable pvr.hts after install to prevent it from
+    # initializing with defaults (127.0.0.1) before we write our settings
+    if pvr_present():
+        log("Disabling pvr.hts immediately after install to prevent default init")
+        set_pvr_enabled(False)
+        xbmc.sleep(1500)
 
     # --- Step 2: Ask for credentials ---
     dialog.ok(
@@ -359,27 +403,20 @@ def run_wizard():
         dialog.ok("Cancelled", "No password entered.")
         return
 
-    # --- Step 3: Disable PVR (if enabled), write settings, re-enable ---
-    was_enabled = pvr_enabled()
+    # --- Step 3: Stop PVR, apply settings (API first, XML fallback), re-enable ---
+    # Always force-disable before writing, even if already stopped
+    set_pvr_enabled(False)
+    xbmc.sleep(1500)
 
     prog = xbmcgui.DialogProgress()
     prog.create("[COLOR red]BGTV[/COLOR] Setup", "Preparing...")
     prog.update(10, "Preparing...")
 
-    if was_enabled:
-        prog.update(20, "Stopping PVR client...")
-        log("Disabling pvr.hts before writing settings")
-        set_pvr_enabled(False)
-        xbmc.sleep(2000)
-
     prog.update(45, "Writing settings...")
-    ok = write_pvr_settings(username, password)
+    ok = apply_pvr_settings(username, password)
     if not ok:
         prog.close()
-        dialog.ok("Error", "Failed to write settings. Check Kodi log for details.")
-        # restore
-        if was_enabled:
-            set_pvr_enabled(True)
+        dialog.ok("Error", "Failed to apply TVHeadend settings.")
         return
 
     prog.update(70, "Starting PVR client...")
