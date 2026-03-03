@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import xbmc
 import xbmcgui
 import xbmcvfs
@@ -134,9 +135,22 @@ def pvr_set_setting(key, value):
 def is_really_configured(expected_user=None):
     """
     Do NOT trust our state file. Check pvr.hts actual settings.
+    We check XML files because xbmcaddon.Addon("pvr.hts") throws when disabled.
     """
-    host = (pvr_get_setting("host") or "").strip().lower()
-    user = (pvr_get_setting("user") or "").strip()
+    instance_path = f"special://profile/addon_data/{PVR_ADDON_ID}/instances/instance-1/settings.xml"
+    legacy_path   = f"special://profile/addon_data/{PVR_ADDON_ID}/settings.xml"
+
+    # Try instance first, then legacy
+    txt = vfs_read_text(instance_path) or vfs_read_text(legacy_path)
+    if not txt:
+        return False
+
+    host_match = re.search(r'<setting id="host">(.*?)</setting>', txt)
+    user_match = re.search(r'<setting id="user">(.*?)</setting>', txt)
+
+    host = host_match.group(1).strip().lower() if host_match else ""
+    user = user_match.group(1).strip() if user_match else ""
+
     if host != HOST.lower():
         return False
     if not user:
@@ -272,12 +286,11 @@ def apply_settings_xml(username, password):
     ok1 = vfs_write_text(instance_path, instance_xml)
     ok2 = vfs_write_text(legacy_path, legacy_xml)
 
-    # Verify it really stuck (at least instance-1)
-    txt = vfs_read_text(instance_path)
-    verified = (HOST in txt) and (f'<setting id="user">{username}</setting>' in txt)
+    # Verify it really stuck
+    verified = is_really_configured(expected_user=username)
 
     if not verified:
-        log("Verification FAILED: instance-1 settings.xml does not contain expected host/user", xbmc.LOGERROR)
+        log("Verification FAILED: XML does not contain expected host/user", xbmc.LOGERROR)
 
     return ok1 and ok2 and verified
 
@@ -399,7 +412,10 @@ def run():
 
     dialog.ok("BGTV Setup", "Settings saved.\n\nKodi will now restart to start Live TV.")
     xbmc.executebuiltin("Quit")
-
+    
+    # Do not sleep after quitting; allow the script to exit immediately
+    # so Kodi can shut down without hanging "script didn't stop in 5 seconds"
+    return
 
 if __name__ == "__main__":
     try:
