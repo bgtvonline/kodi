@@ -137,7 +137,7 @@ def is_really_configured(expected_user=None):
     Do NOT trust our state file. Check pvr.hts actual settings.
     We check XML files because xbmcaddon.Addon("pvr.hts") throws when disabled.
     """
-    instance_path = f"special://profile/addon_data/{PVR_ADDON_ID}/instances/instance-1/settings.xml"
+    instance_path = f"special://profile/addon_data/{PVR_ADDON_ID}/instance-settings-1.xml"
     legacy_path   = f"special://profile/addon_data/{PVR_ADDON_ID}/settings.xml"
 
     # Try instance first, then legacy
@@ -256,12 +256,15 @@ def vfs_read_text(path):
 
 def apply_settings_xml(username, password):
     """Write settings.xml directly via xbmcvfs. Works even when pvr.hts is disabled."""
-    instance_path = f"special://profile/addon_data/{PVR_ADDON_ID}/instances/instance-1/settings.xml"
+    instance_path = f"special://profile/addon_data/{PVR_ADDON_ID}/instance-settings-1.xml"
     legacy_path   = f"special://profile/addon_data/{PVR_ADDON_ID}/settings.xml"
 
     instance_xml = f"""<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings version="2">
+  <setting id="kodi_addon_instance_name">BGTV</setting>
+  <setting id="kodi_addon_instance_enabled">true</setting>
   <setting id="host">{HOST}</setting>
+  <setting id="https">false</setting>
   <setting id="http_port">{HTTP_PORT}</setting>
   <setting id="htsp_port">{HTSP_PORT}</setting>
   <setting id="user">{username}</setting>
