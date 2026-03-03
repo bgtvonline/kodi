@@ -299,7 +299,6 @@ def activate_tv_section():
         "ActivateWindow(TVChannels)",
         "ActivateWindow(TVGuide)",
         "ActivateWindow(TVRecordings)",
-        # fallback: old-style numeric window ids are risky; avoid unless necessary
     ]
     for c in candidates:
         try:
@@ -310,15 +309,50 @@ def activate_tv_section():
     return False
 
 
+def get_pvr_setting(key):
+    try:
+        a = xbmcaddon.Addon(PVR_ADDON_ID)
+        if hasattr(a, "getSettingString"):
+            return a.getSettingString(key)
+        return a.getSetting(key)
+    except Exception:
+        return ""
+
+
+def is_really_configured():
+    """Check if pvr.hts actually has bgtv.pw as host and a non-empty user."""
+    host = get_pvr_setting("host") or ""
+    user = get_pvr_setting("user") or ""
+    return (host.strip().lower() == HOST.lower()) and (user.strip() != "")
+
+
 def run_wizard():
     monitor = xbmc.Monitor()
     dialog = xbmcgui.Dialog()
 
     # Load state
     state_path = state_file_path()
-    state = vfs_read_json(state_path, default={"configured": False, "open_tv_pending": False})
+    state = vfs_read_json(state_path, default={
+        "configured": False,
+        "needs_enable_on_next_boot": False,
+        "open_tv_pending": False
+    })
 
-    # If configured and we still want to auto-open TV once (post-restart)
+    # =====================================================
+    # BOOT B: If we need to enable pvr.hts after restart
+    # =====================================================
+    if state.get("configured") and state.get("needs_enable_on_next_boot"):
+        log("Boot B: Enabling pvr.hts after restart...")
+        set_pvr_enabled(True)
+        xbmc.sleep(4000)  # Let it connect to bgtv.pw
+        state["needs_enable_on_next_boot"] = False
+        state["open_tv_pending"] = False
+        vfs_write_json(state_path, state)
+        log("pvr.hts enabled with correct settings. Opening TV.")
+        activate_tv_section()
+        return
+
+    # If configured and TV pending (legacy state)
     if state.get("configured") and state.get("open_tv_pending"):
         log("Configured already; opening TV section once.")
         xbmc.sleep(1500)
@@ -327,9 +361,22 @@ def run_wizard():
         vfs_write_json(state_path, state)
         return
 
-    # If configured and nothing pending, do nothing
+    # If state says configured, verify pvr.hts actually has bgtv.pw
+    if state.get("configured") and not is_really_configured():
+        log("State says configured, but pvr.hts settings are not applied. Resetting state.")
+        state["configured"] = False
+        state["open_tv_pending"] = False
+        state["needs_enable_on_next_boot"] = False
+        vfs_write_json(state_path, state)
+        # Fall through to run setup again
+
+    # If truly configured and working, do nothing
     if state.get("configured"):
         return
+
+    # =====================================================
+    # BOOT A: Setup flow
+    # =====================================================
 
     # --- Step 1: Ensure PVR installed ---
     if not pvr_present():
@@ -366,8 +413,8 @@ def run_wizard():
                 "[COLOR red]BGTV[/COLOR] Setup",
                 "Automatic install did not complete.\n\n"
                 "Please install manually:\n"
-                "Add-ons → Download → PVR clients → TVHeadend HTSP Client\n\n"
-                "Then run BGTV Setup again."
+                "Add-ons \u2192 Download \u2192 PVR clients \u2192 TVHeadend HTSP Client\n\n"
+                "Then restart Kodi."
             )
             try:
                 xbmc.executebuiltin('ActivateWindow(10040,"addons://search/",return)')
@@ -375,12 +422,10 @@ def run_wizard():
                 pass
             return
 
-    # Immediately disable pvr.hts after install to prevent it from
-    # initializing with defaults (127.0.0.1) before we write our settings
-    if pvr_present():
-        log("Disabling pvr.hts immediately after install to prevent default init")
-        set_pvr_enabled(False)
-        xbmc.sleep(1500)
+    # Immediately disable pvr.hts so it can't start with 127.0.0.1 defaults
+    log("Disabling pvr.hts immediately to prevent default init")
+    set_pvr_enabled(False)
+    xbmc.sleep(1500)
 
     # --- Step 2: Ask for credentials ---
     dialog.ok(
@@ -403,54 +448,48 @@ def run_wizard():
         dialog.ok("Cancelled", "No password entered.")
         return
 
-    # --- Step 3: Stop PVR, apply settings (API first, XML fallback), re-enable ---
-    # Always force-disable before writing, even if already stopped
-    set_pvr_enabled(False)
-    xbmc.sleep(1500)
-
+    # --- Step 3: Apply settings (API first, XML fallback) ---
+    # pvr.hts is already disabled, safe to write
     prog = xbmcgui.DialogProgress()
-    prog.create("[COLOR red]BGTV[/COLOR] Setup", "Preparing...")
-    prog.update(10, "Preparing...")
+    prog.create("[COLOR red]BGTV[/COLOR] Setup", "Writing settings...")
+    prog.update(30, "Writing settings...")
 
-    prog.update(45, "Writing settings...")
     ok = apply_pvr_settings(username, password)
     if not ok:
         prog.close()
         dialog.ok("Error", "Failed to apply TVHeadend settings.")
         return
 
-    prog.update(70, "Starting PVR client...")
-    set_pvr_enabled(True)
-    xbmc.sleep(CONNECT_SETTLE_MS)
-
-    prog.update(90, "Finalizing...")
+    prog.update(60, "Settings saved...")
     xbmc.sleep(500)
-    prog.close()
 
-    # --- Step 4: Mark configured; set open TV pending (after restart) ---
+    # --- Step 4: KEEP pvr.hts DISABLED, mark for next boot ---
+    # CRITICAL: Do NOT enable pvr.hts now. It will start with defaults.
+    # On next boot, our service will enable it BEFORE PVR Manager starts it.
+    set_pvr_enabled(False)
+    xbmc.sleep(1000)
+
     state["configured"] = True
+    state["needs_enable_on_next_boot"] = True
     state["open_tv_pending"] = True
     vfs_write_json(state_path, state)
 
-    # --- Step 5: Restart (most reliable) ---
-    restart_now = dialog.yesno(
-        "Success ✅",
-        f"BGTV is configured!\n\nServer: {HOST}\nUser: {username}\n\n"
-        "Kodi should restart to apply PVR cleanly.\n\nRestart now?"
+    prog.update(100, "Done!")
+    xbmc.sleep(500)
+    prog.close()
+
+    # --- Step 5: Force restart ---
+    dialog.ok(
+        "BGTV \u2714",
+        f"Settings saved!\n\nServer: {HOST}\nUser: {username}\n\n"
+        "Kodi MUST restart now to apply the settings.\n"
+        "Live TV will appear after restart."
     )
-    if restart_now:
-        xbmc.executebuiltin("Quit")
-    else:
-        dialog.ok(
-            "Note",
-            "If TV doesn’t appear immediately, restart Kodi manually.\n"
-            "After restart, BGTV Setup will open the TV section once."
-        )
+    xbmc.executebuiltin("Quit")
 
 
 if __name__ == "__main__":
     try:
-        # Service addons should stay lightweight; run once per boot.
         run_wizard()
     except Exception as e:
         log(f"Fatal error: {e}", xbmc.LOGERROR)
