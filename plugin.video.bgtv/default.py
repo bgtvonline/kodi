@@ -4,6 +4,7 @@
 
 import sys
 import json
+import ssl
 import xbmc
 import xbmcgui
 import xbmcplugin
@@ -11,19 +12,25 @@ import xbmcaddon
 
 try:
     from urllib.request import urlopen, Request
-    from urllib.parse import urlencode, parse_qs
+    from urllib.parse import urlencode, parse_qs, quote
 except ImportError:
     from urllib2 import urlopen, Request
-    from urllib import urlencode
+    from urllib import urlencode, quote
     from urlparse import parse_qs
+
+# SSL context for Kodi's bundled Python (avoids certificate errors)
+try:
+    SSL_CTX = ssl.create_default_context()
+except Exception:
+    SSL_CTX = ssl._create_unverified_context()
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo("id")
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
-API_URL = "http://bgtv.pw/player_api.php"
-PICON_URL = "http://bgtv.pw/static/img/picons"
+API_URL = "https://bgtv.pw/player_api.php"
+PICON_URL = "https://bgtv.pw/static/img/picons"
 
 
 def log(msg, level=xbmc.LOGINFO):
@@ -57,7 +64,7 @@ def api_request(action, extra_params=None):
     url = f"{API_URL}?{urlencode(params)}"
     try:
         req = Request(url, headers={"User-Agent": "Kodi BGTV"})
-        resp = urlopen(req, timeout=15)
+        resp = urlopen(req, timeout=15, context=SSL_CTX)
         return json.loads(resp.read().decode("utf-8"))
     except Exception as e:
         log(f"API error: {e}", xbmc.LOGERROR)
@@ -109,7 +116,6 @@ def list_channels(cat_id):
 
         # Try to use local picon name if no icon URL
         if not icon:
-            from urllib.parse import quote
             icon = f"{PICON_URL}/{quote(name + '.png')}"
 
         li = xbmcgui.ListItem(label=name)
@@ -129,7 +135,7 @@ def play_channel(stream_id, name):
     if not username:
         return
 
-    stream_url = f"http://bgtv.pw/live/{username}/{password}/{stream_id}.ts"
+    stream_url = f"https://bgtv.pw/live/{username}/{password}/{stream_id}.ts"
 
     li = xbmcgui.ListItem(label=name, path=stream_url)
     li.setInfo("video", {"title": name})
