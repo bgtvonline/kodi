@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings>
+  <category label="BGTV Login">
+    <setting id="username" type="text" label="Потребителско име / Username" default=""/>
+    <setting id="password" type="text" label="Парола / Password" option="hidden" default=""/>
+  </category>
+</settings>
