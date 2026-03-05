@@ -18,11 +18,8 @@ except ImportError:
     from urllib import urlencode, quote
     from urlparse import parse_qs
 
-# SSL context for Kodi's bundled Python (avoids certificate errors)
-try:
-    SSL_CTX = ssl.create_default_context()
-except Exception:
-    SSL_CTX = ssl._create_unverified_context()
+# SSL context — skip verification (Kodi's Windows Python lacks CA certs)
+SSL_CTX = ssl._create_unverified_context()
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo("id")
