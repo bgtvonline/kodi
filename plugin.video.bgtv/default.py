@@ -59,14 +59,22 @@ def api_request(action, extra_params=None):
         params.update(extra_params)
 
     url = f"{API_URL}?{urlencode(params)}"
+    log(f"Requesting: {API_URL}?action={action}")
     try:
         req = Request(url, headers={"User-Agent": "Kodi BGTV"})
         resp = urlopen(req, timeout=15, context=SSL_CTX)
-        return json.loads(resp.read().decode("utf-8"))
+        raw = resp.read().decode("utf-8")
+        log(f"Response ({len(raw)} bytes): {raw[:200]}")
+        data = json.loads(raw)
+        # Check if auth failed
+        if isinstance(data, dict) and data.get("user_info", {}).get("auth") == 0:
+            msg = data.get("user_info", {}).get("message", "Auth failed")
+            xbmcgui.Dialog().ok("BGTV", f"Грешка: {msg}\n\n[COLOR gray](Error: {msg})[/COLOR]")
+            return None
+        return data
     except Exception as e:
-        log(f"API error: {e}", xbmc.LOGERROR)
-        xbmcgui.Dialog().notification("BGTV", "Грешка при свързване / Connection error",
-                                       xbmcgui.NOTIFICATION_ERROR, 3000)
+        log(f"API error: {type(e).__name__}: {e}", xbmc.LOGERROR)
+        xbmcgui.Dialog().ok("BGTV Error", f"{type(e).__name__}:\n{str(e)[:300]}")
         return None
 
 
