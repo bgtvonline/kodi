@@ -93,6 +93,31 @@
             </assets>
         </extension>
     </addon>
+    <addon id="script.bgtv.advancedsettings" name="[COLOR red]BGTV[/COLOR] Buffering Fix" version="1.0.0" provider-name="BGTV">
+        <requires>
+            <import addon="xbmc.python" version="3.0.0" />
+        </requires>
+        <extension point="xbmc.python.script" library="default.py">
+            <provides>executable</provides>
+        </extension>
+        <extension point="xbmc.addon.metadata">
+            <summary lang="bg">Оптимизира буферирането за IPTV стрийминг</summary>
+            <summary lang="en">Optimizes buffering for IPTV streaming</summary>
+            <description lang="bg">
+      Записва оптимизиран advancedsettings.xml за по-добро IPTV стрийминг.
+      100MB буфер, readfactor 8. Един клик - без спиране на картината!
+    </description>
+            <description lang="en">
+      Writes an optimized advancedsettings.xml for better IPTV streaming.
+      100MB buffer, readfactor 8. One click - no more buffering!
+    </description>
+            <platform>all</platform>
+            <license>MIT</license>
+            <assets>
+                <icon>icon.png</icon>
+            </assets>
+        </extension>
+    </addon>
     <addon id="repository.nixgates" name="Nixgates Repo" version="2.2.0" provider-name="Nixgates">
         <extension point="xbmc.addon.repository" name="Nixgates Repo">
             <dir minversion="18.0">
