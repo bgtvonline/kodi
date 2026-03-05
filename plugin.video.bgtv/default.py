@@ -22,8 +22,8 @@ ADDON_ID = ADDON.getAddonInfo("id")
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
-API_URL = "https://bgtv.pw/player_api.php"
-PICON_URL = "https://bgtv.pw/static/img/picons"
+API_URL = "http://bgtv.pw/player_api.php"
+PICON_URL = "http://bgtv.pw/static/img/picons"
 
 
 def log(msg, level=xbmc.LOGINFO):
@@ -129,7 +129,7 @@ def play_channel(stream_id, name):
     if not username:
         return
 
-    stream_url = f"https://bgtv.pw/live/{username}/{password}/{stream_id}.ts"
+    stream_url = f"http://bgtv.pw/live/{username}/{password}/{stream_id}.ts"
 
     li = xbmcgui.ListItem(label=name, path=stream_url)
     li.setInfo("video", {"title": name})

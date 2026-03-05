@@ -93,7 +93,7 @@
             </assets>
         </extension>
     </addon>
-    <addon id="script.bgtv.advancedsettings" name="[COLOR red]BGTV[/COLOR] Buffering Fix" version="1.0.0" provider-name="BGTV">
+    <addon id="script.bgtv.advancedsettings" name="[COLOR red]BGTV[/COLOR] Buffering Fix" version="1.0.1" provider-name="BGTV">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
         </requires>
@@ -171,7 +171,7 @@
             <source>https://www.github.com/a4k-openproject/repository.openwizard/</source>
         </extension>
     </addon>
-    <addon id="script.bgtv.epg" name="[COLOR red]BGTV[/COLOR] Channel Logos" version="1.0.0" provider-name="BGTV">
+    <addon id="script.bgtv.epg" name="[COLOR red]BGTV[/COLOR] Channel Logos" version="1.0.1" provider-name="BGTV">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
         </requires>
@@ -196,7 +196,7 @@
             </assets>
         </extension>
     </addon>
-    <addon id="plugin.video.bgtv" name="[COLOR red]BGTV[/COLOR] Live TV" version="1.0.0" provider-name="BGTV">
+    <addon id="plugin.video.bgtv" name="[COLOR red]BGTV[/COLOR] Live TV" version="1.0.1" provider-name="BGTV">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
         </requires>

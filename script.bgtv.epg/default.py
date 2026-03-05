@@ -15,7 +15,7 @@ except ImportError:
     from urllib import quote
 
 ADDON_NAME = "BGTV Channel Logos"
-PICON_BASE_URL = "https://bgtv.pw/static/img/picons"
+PICON_BASE_URL = "http://bgtv.pw/static/img/picons"
 LOCAL_PICON_DIR = xbmcvfs.translatePath("special://profile/addon_data/script.bgtv.epg/picons/")
 
 
