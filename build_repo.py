@@ -1,65 +1,96 @@
-import os
-import zipfile
+#!/usr/bin/env python3
+"""
+build_repo.py — packages the BGPVR Kodi addons for a GitHub-hosted repository.
+
+Run from the kodi_bgpvr/ directory:
+    python3 build_repo.py
+
+Produces:
+    addons.xml          — Kodi repository index
+    addons.xml.md5      — checksum
+    service.bgpvr.setup-X.Y.Z.zip
+    plugin.video.bgpvr-X.Y.Z.zip
+    script.bgpvr.advancedsettings-X.Y.Z.zip
+    repository.bgpvr-X.Y.Z.zip
+"""
+
 import hashlib
-import xml.etree.ElementTree as ET
+import os
+import re
+import zipfile
+from xml.etree import ElementTree as ET
 
-REPO_ROOT = "/opt/bgtv/archive/kodi_repo_staging"
-ADDONS_XML_PATH = os.path.join(REPO_ROOT, "addons.xml")
-ADDONS_MD5_PATH = os.path.join(REPO_ROOT, "addons.xml.md5")
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 
-def create_addons_xml():
+ADDONS = [
+    "service.bgpvr.setup",
+    "plugin.video.bgpvr",
+    "script.bgpvr.advancedsettings",
+    "repository.bgpvr",
+]
+
+# Files to exclude from zips
+EXCLUDE_PATTERNS = {".pyc", ".pyo", "__pycache__", ".git", ".DS_Store"}
+
+
+def addon_version(addon_dir):
+    xml = ET.parse(os.path.join(addon_dir, "addon.xml"))
+    return xml.getroot().get("version")
+
+
+def should_include(path):
+    return not any(pat in path for pat in EXCLUDE_PATTERNS)
+
+
+def zip_addon(addon_id):
+    addon_dir = os.path.join(REPO_ROOT, addon_id)
+    version   = addon_version(addon_dir)
+    zip_name  = f"{addon_id}-{version}.zip"
+    zip_path  = os.path.join(REPO_ROOT, zip_name)
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(addon_dir):
+            # Skip excluded dirs in-place
+            dirs[:] = [d for d in dirs if should_include(d)]
+            for fname in files:
+                if not should_include(fname):
+                    continue
+                full = os.path.join(root, fname)
+                arcname = os.path.relpath(full, REPO_ROOT)
+                zf.write(full, arcname)
+
+    print(f"  Packed  {zip_name}")
+    return version
+
+
+def build_addons_xml():
     root = ET.Element("addons")
-    seen_ids = set()
+    for addon_id in ADDONS:
+        addon_dir = os.path.join(REPO_ROOT, addon_id)
+        tree = ET.parse(os.path.join(addon_dir, "addon.xml"))
+        root.append(tree.getroot())
 
-    # First, parse our own repository addon.xml
-    repo_xml = os.path.join(REPO_ROOT, "repository.bgtv", "addon.xml")
-    if os.path.exists(repo_xml):
-        tree = ET.parse(repo_xml)
-        addon_elem = tree.getroot()
-        addon_id = addon_elem.get('id')
-        if addon_id not in seen_ids:
-            root.append(addon_elem)
-            seen_ids.add(addon_id)
+    xml_bytes = ET.tostring(root, encoding="unicode", xml_declaration=False)
+    xml_text  = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_bytes
 
-    # Then parse the addon.xml out of every zip we host
-    for walk_root, dirs, files in os.walk(REPO_ROOT):
-        # don't traverse into .git or repository.bgtv
-        if '.git' in dirs: dirs.remove('.git')
-        if 'repository.bgtv' in dirs: dirs.remove('repository.bgtv')
+    out_path = os.path.join(REPO_ROOT, "addons.xml")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(xml_text)
 
-        for file in files:
-            if file.endswith(".zip"):
-                zip_path = os.path.join(walk_root, file)
-                try:
-                    with zipfile.ZipFile(zip_path, 'r') as z:
-                        addon_xml_files = [f for f in z.namelist() if f.endswith('addon.xml')]
-                        if addon_xml_files:
-                            addon_xml_file = min(addon_xml_files, key=len)
-                            with z.open(addon_xml_file) as xml_file:
-                                addon_tree = ET.parse(xml_file)
-                                addon_elem = addon_tree.getroot()
-                                addon_id = addon_elem.get('id')
-                                if addon_id not in seen_ids:
-                                    root.append(addon_elem)
-                                    seen_ids.add(addon_id)
-                except Exception as e:
-                    print(f"Error processing {zip_path}: {e}")
+    md5 = hashlib.md5(xml_text.encode("utf-8")).hexdigest()
+    with open(out_path + ".md5", "w") as f:
+        f.write(md5)
 
-    # Write the combined XML
-    tree = ET.ElementTree(root)
-    ET.indent(tree, space="    ", level=0)
-    tree.write(ADDONS_XML_PATH, encoding="UTF-8", xml_declaration=True)
+    print(f"  addons.xml  (md5={md5})")
 
-    # Generate MD5 checksum
-    with open(ADDONS_XML_PATH, "rb") as f:
-        md5_hash = hashlib.md5()
-        for chunk in iter(lambda: f.read(4096), b""):
-            md5_hash.update(chunk)
-    
-    with open(ADDONS_MD5_PATH, "w") as f:
-        f.write(md5_hash.hexdigest())
 
-    print("addons.xml and addons.xml.md5 successfully generated.")
+def main():
+    print("Building BGPVR Kodi repository…\n")
+    for addon_id in ADDONS:
+        zip_addon(addon_id)
+    build_addons_xml()
+    print("\nDone.  Commit everything in kodi_bgpvr/ and push to GitHub.")
+
 
 if __name__ == "__main__":
-    create_addons_xml()
+    main()
