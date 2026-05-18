@@ -6,12 +6,11 @@ Run from the kodi_bgpvr/ directory:
     python3 build_repo.py
 
 Produces:
-    addons.xml          — Kodi repository index
-    addons.xml.md5      — checksum
-    service.bgpvr.setup-X.Y.Z.zip
-    plugin.video.bgpvr-X.Y.Z.zip
-    script.bgpvr.advancedsettings-X.Y.Z.zip
-    repository.bgpvr-X.Y.Z.zip
+    addons.xml                                          — Kodi repository index
+    addons.xml.md5                                      — checksum
+    service.bgpvr.setup/service.bgpvr.setup-X.Y.Z.zip
+    plugin.video.bgpvr/plugin.video.bgpvr-X.Y.Z.zip
+    etc.  (Kodi expects zips inside each addon subfolder)
 """
 
 import hashlib
@@ -46,20 +45,20 @@ def zip_addon(addon_id):
     addon_dir = os.path.join(REPO_ROOT, addon_id)
     version   = addon_version(addon_dir)
     zip_name  = f"{addon_id}-{version}.zip"
-    zip_path  = os.path.join(REPO_ROOT, zip_name)
+    # Kodi fetches zips from <datadir>/<addon_id>/<addon_id>-<version>.zip
+    zip_path  = os.path.join(addon_dir, zip_name)
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(addon_dir):
-            # Skip excluded dirs in-place
             dirs[:] = [d for d in dirs if should_include(d)]
             for fname in files:
-                if not should_include(fname):
+                if not should_include(fname) or fname.endswith(".zip"):
                     continue
                 full = os.path.join(root, fname)
                 arcname = os.path.relpath(full, REPO_ROOT)
                 zf.write(full, arcname)
 
-    print(f"  Packed  {zip_name}")
+    print(f"  Packed  {addon_id}/{zip_name}")
     return version
 
 
