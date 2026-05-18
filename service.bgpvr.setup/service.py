@@ -130,18 +130,19 @@ def normalise_url(url):
 # ---------------------------------------------------------------------------
 
 def validate_credentials(server_url, username, password):
-    """Returns (True, "OK") or (False, "reason string")."""
+    """Returns (True, "OK") or (False, "reason string").
+    Calls /player_api.php with no action — BGPVR returns the login block directly.
+    """
     try:
-        params = urlencode({
-            "username": username,
-            "password": password,
-            "action":   "get_user_info",
-        })
+        params = urlencode({"username": username, "password": password})
         url = f"{server_url}/player_api.php?{params}"
         log(f"Validating credentials at {server_url}")
         req  = Request(url, headers={"User-Agent": "Kodi BGPVR/1.0"})
         resp = urlopen(req, timeout=15, context=SSL_CTX)
         data = json.loads(resp.read().decode("utf-8"))
+
+        if not isinstance(data, dict):
+            return False, "Invalid credentials"
 
         user_info = data.get("user_info", {})
         auth = user_info.get("auth")
